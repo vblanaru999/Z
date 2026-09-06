@@ -69,12 +69,13 @@ a {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(247, 249, 251, 0.86);
+  background: rgba(247, 249, 251, 0.94);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
 }
 
 .header-inner {
+  position: relative;
   max-width: 1180px;
   margin: 0 auto;
   padding: 0.85rem 1.25rem;
@@ -722,14 +723,18 @@ section {
 
 .check {
   display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
+  align-items: center;
+  gap: 0.5rem;
   font-weight: 500;
   color: var(--slate);
+  line-height: 1.35;
 }
 
 .check input {
-  margin-top: 0.25rem;
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
   accent-color: var(--amber-deep);
 }
 
@@ -743,6 +748,13 @@ section {
   min-height: 1.4em;
   font-weight: 600;
   color: var(--amber-deep);
+}
+
+.form-status.is-success {
+  padding: 0.75rem 0.85rem;
+  background: rgba(196, 120, 26, 0.12);
+  border-left: 3px solid var(--amber);
+  color: var(--ink);
 }
 
 .site-footer {
@@ -833,7 +845,7 @@ section {
 
   .site-nav {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 1px);
     left: 0;
     right: 0;
     display: none;
@@ -842,7 +854,10 @@ section {
     gap: 0;
     padding: 0.75rem 1.25rem 1.25rem;
     background: rgba(247, 249, 251, 0.98);
-    border-bottom: 1px solid var(--line);
+    border: 1px solid var(--line);
+    border-top: none;
+    box-shadow: 0 12px 28px rgba(12, 22, 34, 0.12);
+    z-index: 120;
   }
 
   .site-nav.is-open {

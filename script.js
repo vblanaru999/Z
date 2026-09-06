@@ -42,6 +42,7 @@
   if (form && status) {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
+      status.classList.remove("is-success");
       if (!form.checkValidity()) {
         status.textContent = "Please complete the required fields.";
         form.reportValidity();
@@ -49,6 +50,7 @@
       }
       status.textContent =
         "Thanks — your inquiry is ready to send. Email info@bogdandelivery.com or call (253) 364-0717.";
+      status.classList.add("is-success");
       form.reset();
     });
   }
