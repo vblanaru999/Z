@@ -109,7 +109,16 @@
           <button id="add-asset-btn" class="btn btn-primary">+ Add Asset</button>
         </div>
         <article class="panel no-pad">
-          <div class="table-wrap"><table><thead><tr><th>Asset Tag</th><th>Category</th><th>Manufacturer / Model</th><th>Serial</th><th>Location</th><th>Status</th><th>Value</th><th></th></tr></thead><tbody id="assets-body"></tbody></table></div>
+          <div class="table-wrap"><table id="assets-table"><thead><tr>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="asset_tag">Asset Tag</button></th>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="category">Category</button></th>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="manufacturer_model">Manufacturer / Model</button></th>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="serial_number">Serial</button></th>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="location">Location</button></th>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="status">Status</button></th>
+            <th><button type="button" class="sort-btn" data-table="assets" data-sort="purchase_price">Value</button></th>
+            <th></th>
+          </tr></thead><tbody id="assets-body"></tbody></table></div>
         </article>
       </section>
 
@@ -119,7 +128,16 @@
           <button id="add-subscription-btn" class="btn btn-primary">+ Add Subscription</button>
         </div>
         <article class="panel no-pad">
-          <div class="table-wrap"><table><thead><tr><th>Service</th><th>Category</th><th>Vendor</th><th>Billing</th><th>Amount</th><th>Renewal</th><th>Status</th><th></th></tr></thead><tbody id="subscriptions-body"></tbody></table></div>
+          <div class="table-wrap"><table id="subscriptions-table"><thead><tr>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="name">Service</button></th>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="category">Category</button></th>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="vendor">Vendor</button></th>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="billing_frequency">Billing</button></th>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="billing_amount">Amount</button></th>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="renewal_date">Renewal</button></th>
+            <th><button type="button" class="sort-btn" data-table="subscriptions" data-sort="status">Status</button></th>
+            <th></th>
+          </tr></thead><tbody id="subscriptions-body"></tbody></table></div>
         </article>
       </section>
 

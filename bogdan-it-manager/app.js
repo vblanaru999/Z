@@ -5,7 +5,11 @@ const state = {
   subscriptions: [],
   locations: [],
   vendors: [],
-  view: 'dashboard'
+  view: 'dashboard',
+  sort: {
+    assets: { key: 'asset_tag', dir: 'asc' },
+    subscriptions: { key: 'name', dir: 'asc' }
+  }
 };
 
 const $ = (id) => document.getElementById(id);
@@ -187,9 +191,86 @@ function monthlyEquivalent(s) {
   return amount * (factors[s.billing_frequency] ?? 1);
 }
 
+function assetSortValue(a, key) {
+  switch (key) {
+    case 'asset_tag': return a.asset_tag || '';
+    case 'category': return a.category || '';
+    case 'manufacturer_model': return [a.manufacturer, a.model].filter(Boolean).join(' ');
+    case 'serial_number': return a.serial_number || '';
+    case 'location': return locationById(a.location_id)?.code || '';
+    case 'status': return a.status || '';
+    case 'purchase_price': return Number(a.purchase_price ?? Number.NEGATIVE_INFINITY);
+    default: return '';
+  }
+}
+
+function subscriptionSortValue(s, key) {
+  switch (key) {
+    case 'name': return s.name || '';
+    case 'category': return s.category || '';
+    case 'vendor': return vendorById(s.vendor_id)?.name || '';
+    case 'billing_frequency': return String(s.billing_frequency || '').replaceAll('_', ' ');
+    case 'billing_amount': return Number(s.billing_amount ?? Number.NEGATIVE_INFINITY);
+    case 'renewal_date': return s.renewal_date || '';
+    case 'status': return s.status || '';
+    default: return '';
+  }
+}
+
+function compareSortValues(a, b, dir) {
+  const emptyA = a === '' || a === null || a === undefined || Number.isNaN(a);
+  const emptyB = b === '' || b === null || b === undefined || Number.isNaN(b);
+  if (emptyA && emptyB) return 0;
+  if (emptyA) return 1;
+  if (emptyB) return -1;
+  let cmp = 0;
+  if (typeof a === 'number' && typeof b === 'number') cmp = a - b;
+  else cmp = String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  return dir === 'desc' ? -cmp : cmp;
+}
+
+function sortRows(rows, table, valueFn) {
+  const { key, dir } = state.sort[table];
+  return [...rows].sort((left, right) => compareSortValues(valueFn(left, key), valueFn(right, key), dir));
+}
+
+function updateSortHeaders(table) {
+  const { key, dir } = state.sort[table];
+  document.querySelectorAll(`.sort-btn[data-table="${table}"]`).forEach(btn => {
+    const active = btn.dataset.sort === key;
+    btn.classList.toggle('is-active', active);
+    btn.dataset.dir = active ? dir : '';
+    btn.setAttribute('aria-sort', active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+}
+
+function setSort(table, key) {
+  const current = state.sort[table];
+  if (current.key === key) current.dir = current.dir === 'asc' ? 'desc' : 'asc';
+  else { current.key = key; current.dir = 'asc'; }
+  if (table === 'assets') renderAssets();
+  else renderSubscriptions();
+}
+window.setSort = setSort;
+
+function bindSortTable(tableId, tableName) {
+  const table = document.getElementById(tableId);
+  if (!table || table.dataset.sortBound === '1') return;
+  table.dataset.sortBound = '1';
+  table.tHead?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sort-btn');
+    if (!btn) return;
+    e.preventDefault();
+    setSort(tableName, btn.dataset.sort);
+  });
+}
+
 function renderAssets() {
   const q = $('asset-search')?.value?.trim().toLowerCase() || '';
-  const rows = state.assets.filter(a => [a.asset_tag,a.category,a.manufacturer,a.model,a.serial_number,a.hostname].some(v=>String(v||'').toLowerCase().includes(q)));
+  const filtered = state.assets.filter(a => [a.asset_tag,a.category,a.manufacturer,a.model,a.serial_number,a.hostname].some(v=>String(v||'').toLowerCase().includes(q)));
+  const rows = sortRows(filtered, 'assets', assetSortValue);
+  updateSortHeaders('assets');
+  bindSortTable('assets-table', 'assets');
   $('assets-body').innerHTML = rows.length ? rows.map(a=>`<tr>
     <td><div class="asset-name"><strong>${esc(a.asset_tag)}</strong><small>${esc(a.hostname || '')}</small></div></td>
     <td>${esc(a.category)}</td><td>${esc([a.manufacturer,a.model].filter(Boolean).join(' ') || '—')}</td><td>${esc(a.serial_number || '—')}</td><td>${esc(locationById(a.location_id)?.code || '—')}</td><td>${badge(a.status)}</td><td>${formatMoney(a.purchase_price)}</td>
@@ -199,7 +280,10 @@ function renderAssets() {
 
 function renderSubscriptions() {
   const q = $('subscription-search')?.value?.trim().toLowerCase() || '';
-  const rows = state.subscriptions.filter(s=>[s.name,s.category,s.account_name].some(v=>String(v||'').toLowerCase().includes(q)));
+  const filtered = state.subscriptions.filter(s=>[s.name,s.category,s.account_name].some(v=>String(v||'').toLowerCase().includes(q)));
+  const rows = sortRows(filtered, 'subscriptions', subscriptionSortValue);
+  updateSortHeaders('subscriptions');
+  bindSortTable('subscriptions-table', 'subscriptions');
   $('subscriptions-body').innerHTML = rows.length ? rows.map(s=>`<tr>
     <td><div class="asset-name"><strong>${esc(s.name)}</strong><small>${esc(s.account_email || s.account_name || '')}</small></div></td><td>${esc(s.category || '—')}</td><td>${esc(vendorById(s.vendor_id)?.name || '—')}</td><td>${esc(String(s.billing_frequency).replaceAll('_',' '))}</td><td>${formatMoney(s.billing_amount)}</td><td>${fmtDate(s.renewal_date)}</td><td>${badge(s.status)}</td>
     <td><div class="table-actions"><button class="table-btn" onclick="openSubscriptionForm('${s.id}')">Edit</button></div></td>
