@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Bogdan IT Manager</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <section id="login-screen" class="login-shell">
+    <div class="login-card">
+      <div class="brand-lockup">
+        <div class="brand-mark">BD</div>
+        <div>
+          <h1>Bogdan IT Manager</h1>
+          <p>Inventory & subscription management</p>
+        </div>
+      </div>
+      <form id="login-form" class="stack-lg">
+        <div>
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" autocomplete="email" required placeholder="you@company.com" />
+        </div>
+        <div>
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••" />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+        <p id="login-error" class="form-error"></p>
+      </form>
+      <div class="login-note">Uses Supabase Auth and your existing Row Level Security policies.</div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark small">BD</div>
+        <div>
+          <strong>Bogdan IT</strong>
+          <span>Manager</span>
+        </div>
+      </div>
+
+      <nav class="nav-list" aria-label="Main navigation">
+        <button class="nav-item active" data-view="dashboard"><span>▦</span> Dashboard</button>
+        <button class="nav-item" data-view="assets"><span>▣</span> Assets</button>
+        <button class="nav-item" data-view="subscriptions"><span>↻</span> Subscriptions</button>
+        <button class="nav-item" data-view="locations"><span>⌖</span> Locations</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="org-chip">
+          <span class="status-dot"></span>
+          <div><strong>Bogdan Delivery LLC</strong><small>BDL</small></div>
+        </div>
+        <button id="signout-btn" class="btn btn-ghost btn-block">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="page-title">Dashboard</h2>
+          <p id="page-subtitle">Overview of IT assets and recurring services.</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="refresh-btn" class="btn btn-secondary">↻ Refresh</button>
+          <div class="user-pill"><span id="user-initial">U</span><div><strong id="user-email">User</strong><small>Authenticated</small></div></div>
+        </div>
+      </header>
+
+      <div id="setup-warning" class="setup-warning hidden">
+        <strong>Data API setup needed.</strong>
+        <span id="setup-warning-text">Add <code>it_inventory</code> to Supabase Data API exposed schemas and make sure this login is an organization member.</span>
+      </div>
+
+      <section id="view-dashboard" class="view active">
+        <div class="kpi-grid">
+          <article class="kpi-card"><div class="kpi-icon">▣</div><div><span>Total assets</span><strong id="kpi-assets">—</strong><small id="kpi-assets-sub">Loading…</small></div></article>
+          <article class="kpi-card"><div class="kpi-icon">↻</div><div><span>Active subscriptions</span><strong id="kpi-subs">—</strong><small id="kpi-subs-sub">Loading…</small></div></article>
+          <article class="kpi-card"><div class="kpi-icon">$</div><div><span>Monthly run rate</span><strong id="kpi-cost">—</strong><small>Estimated recurring spend</small></div></article>
+          <article class="kpi-card"><div class="kpi-icon">⌖</div><div><span>Locations</span><strong id="kpi-locations">—</strong><small>Active sites</small></div></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel">
+            <div class="panel-header"><div><h3>Assets by location</h3><p>Current inventory distribution</p></div></div>
+            <div id="asset-location-bars" class="bar-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header"><div><h3>Upcoming actions</h3><p>Renewals and warranties</p></div></div>
+            <div id="upcoming-list" class="timeline"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header"><div><h3>Recent assets</h3><p>Latest equipment records</p></div><button class="btn btn-link" data-go="assets">View all →</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Category</th><th>Location</th><th>Status</th><th>Updated</th></tr></thead><tbody id="recent-assets-body"></tbody></table></div>
+        </article>
+      </section>
+
+      <section id="view-assets" class="view">
+        <div class="action-row">
+          <div class="search-box"><span>⌕</span><input id="asset-search" placeholder="Search asset tag, serial, model…" /></div>
+          <button id="add-asset-btn" class="btn btn-primary">+ Add Asset</button>
+        </div>
+        <article class="panel no-pad">
+          <div class="table-wrap"><table><thead><tr><th>Asset Tag</th><th>Category</th><th>Manufacturer / Model</th><th>Serial</th><th>Location</th><th>Status</th><th>Value</th><th></th></tr></thead><tbody id="assets-body"></tbody></table></div>
+        </article>
+      </section>
+
+      <section id="view-subscriptions" class="view">
+        <div class="action-row">
+          <div class="search-box"><span>⌕</span><input id="subscription-search" placeholder="Search subscriptions…" /></div>
+          <button id="add-subscription-btn" class="btn btn-primary">+ Add Subscription</button>
+        </div>
+        <article class="panel no-pad">
+          <div class="table-wrap"><table><thead><tr><th>Service</th><th>Category</th><th>Vendor</th><th>Billing</th><th>Amount</th><th>Renewal</th><th>Status</th><th></th></tr></thead><tbody id="subscriptions-body"></tbody></table></div>
+        </article>
+      </section>
+
+      <section id="view-locations" class="view">
+        <div class="action-row">
+          <div><h3 class="section-heading">Bogdan Delivery locations</h3><p class="muted">Offices and warehouses used for asset assignment.</p></div>
+          <button id="add-location-btn" class="btn btn-primary">+ Add Location</button>
+        </div>
+        <div id="locations-grid" class="locations-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div><h3 id="modal-title">Add</h3><p id="modal-subtitle">Enter details below.</p></div>
+        <button id="modal-close" class="icon-btn" aria-label="Close">×</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
