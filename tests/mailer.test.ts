@@ -1,0 +1,226 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  createMailer,
+  describeMailMode,
+  resolveSmtp,
+  sendWithSmtp2Go,
+  type SmtpConfig,
+} from "../src/lib/mailer";
+
+const message = {
+  to: "maria.alvarez@example.com",
+  subject: "Warning: Order not closed in the app",
+  text: "This is a formal warning.",
+};
+
+describe("mailer", () => {
+  it("saves to the outbox when SMTP is not configured", async () => {
+    const deliver = vi.fn();
+    const mailer = createMailer({}, deliver);
+    await expect(mailer.send(message)).resolves.toEqual({
+      transport: "outbox",
+      status: "saved",
+    });
+    expect(deliver).not.toHaveBeenCalled();
+    expect(describeMailMode({}).mode).toBe("outbox");
+  });
+
+  it("treats blank SMTP variables as unconfigured", async () => {
+    const mailer = createMailer({
+      SMTP_HOST: "  ",
+      SMTP_PORT: "",
+      SMTP_FROM: " ",
+    });
+    await expect(mailer.send(message)).resolves.toEqual({
+      transport: "outbox",
+      status: "saved",
+    });
+  });
+
+  it("refuses to send when SMTP is only partly configured", async () => {
+    const deliver = vi.fn();
+    const mailer = createMailer({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "587" }, deliver);
+    await expect(mailer.send(message)).rejects.toThrow(/SMTP_HOST, SMTP_PORT, and SMTP_FROM/);
+    expect(deliver).not.toHaveBeenCalled();
+    expect(describeMailMode({ SMTP_FROM: "ops@example.com" }).mode).toBe("invalid");
+  });
+
+  it("sends through SMTP when host, port, and from are set", async () => {
+    const seen: SmtpConfig[] = [];
+    const mailer = createMailer(
+      {
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "587",
+        SMTP_FROM: "ops@example.com",
+        SMTP_USER: "ops",
+        SMTP_PASS: "secret",
+      },
+      async (_message, config) => {
+        seen.push(config);
+      },
+    );
+    await expect(mailer.send(message)).resolves.toEqual({
+      transport: "smtp",
+      status: "sent",
+    });
+    expect(seen[0]).toEqual({
+      host: "smtp.example.com",
+      port: 587,
+      from: "ops@example.com",
+      secure: false,
+      auth: { user: "ops", pass: "secret" },
+    });
+    expect(describeMailMode({
+      SMTP_HOST: "smtp.example.com",
+      SMTP_PORT: "587",
+      SMTP_FROM: "ops@example.com",
+    }).mode).toBe("smtp");
+  });
+
+  it("keeps a failed SMTP attempt as a failed result instead of throwing", async () => {
+    const mailer = createMailer(
+      {
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "587",
+        SMTP_FROM: "ops@example.com",
+      },
+      async () => {
+        throw new Error("connection refused");
+      },
+    );
+    await expect(mailer.send(message)).resolves.toEqual({
+      transport: "smtp",
+      status: "failed",
+      error: "connection refused",
+    });
+  });
+
+  it("chooses implicit TLS for port 465 unless SMTP_SECURE says otherwise", () => {
+    expect(
+      resolveSmtp({
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "465",
+        SMTP_FROM: "ops@example.com",
+      })?.secure,
+    ).toBe(true);
+    expect(
+      resolveSmtp({
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "465",
+        SMTP_FROM: "ops@example.com",
+        SMTP_SECURE: "false",
+      })?.secure,
+    ).toBe(false);
+    expect(
+      resolveSmtp({
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "587",
+        SMTP_FROM: "ops@example.com",
+        SMTP_SECURE: "true",
+      })?.secure,
+    ).toBe(true);
+    expect(
+      resolveSmtp({
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "25",
+        SMTP_FROM: "ops@example.com",
+      })?.auth,
+    ).toBeUndefined();
+  });
+
+  it("prefers SMTP2GO over SMTP when the API key is set", async () => {
+    const smtp = vi.fn();
+    const mailer = createMailer(
+      {
+        SMTP2GO_API_KEY: "test-key",
+        SMTP2GO_FROM: "desk@example.com",
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "587",
+        SMTP_FROM: "ops@example.com",
+      },
+      {
+        deliverSmtp: smtp,
+        sendSmtp2Go: async (request) => {
+          expect(request.sender).toBe("desk@example.com");
+          expect(request.to).toEqual([message.to]);
+          expect(request.subject).toBe(message.subject);
+          expect(request.textBody).toBe(message.text);
+          return { emailId: "id-9" };
+        },
+      },
+    );
+    await expect(mailer.send(message)).resolves.toEqual({
+      transport: "smtp2go",
+      status: "sent",
+      emailId: "id-9",
+    });
+    expect(smtp).not.toHaveBeenCalled();
+    expect(describeMailMode({ SMTP2GO_API_KEY: "test-key" })).toMatchObject({
+      mode: "smtp2go",
+      detail: expect.stringContaining("claim@bogdandelivery.com"),
+    });
+  });
+
+  it("reads the SMTP2GO email id and redacts the key from an error", async () => {
+    const key = "api-TESTONLY";
+    const accepted = await sendWithSmtp2Go(
+      {
+        apiKey: key,
+        sender: "claim@bogdandelivery.com",
+        to: ["claim@bogdandelivery.com"],
+        subject: "Claim setup test",
+        textBody: "Setup test",
+      },
+      async (url, init) => {
+        expect(url).toBe("https://api.smtp2go.com/v3/email/send");
+        expect(new Headers(init?.headers).get("X-Smtp2go-Api-Key")).toBe(key);
+        const body = JSON.parse(String(init?.body));
+        expect(body).toMatchObject({
+          sender: "claim@bogdandelivery.com",
+          to: ["claim@bogdandelivery.com"],
+          subject: "Claim setup test",
+          text_body: "Setup test",
+        });
+        return new Response(
+          JSON.stringify({ data: { succeeded: 1, failed: 0, email_id: "1er8abc" } }),
+          { status: 200 },
+        );
+      },
+    );
+    expect(accepted).toEqual({ emailId: "1er8abc" });
+
+    try {
+      await sendWithSmtp2Go(
+        {
+          apiKey: key,
+          sender: "claim@bogdandelivery.com",
+          to: ["claim@bogdandelivery.com"],
+          subject: "Claim setup test",
+          textBody: "Setup test",
+        },
+        async () =>
+          new Response(
+            JSON.stringify({
+              data: { error: `bad key ${key}`, error_code: "E_INVALID" },
+            }),
+            { status: 400 },
+          ),
+      );
+      throw new Error("expected SMTP2GO to reject");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      expect(text).toBe("SMTP2GO 400: bad key [redacted] (E_INVALID)");
+      expect(text).not.toContain(key);
+    }
+  });
+
+  it("rejects a port that is not a number", () => {
+    expect(() =>
+      resolveSmtp({
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "mail",
+        SMTP_FROM: "ops@example.com",
+      }),
+    ).toThrow(/SMTP_PORT/);
+  });
+});
