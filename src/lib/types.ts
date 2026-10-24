@@ -38,7 +38,7 @@ export const SOURCE_LABELS: Record<ClaimSource, string> = {
 
 export type FeeBasis = "default" | "claim_type";
 
-export type EmailTransport = "outbox" | "smtp";
+export type EmailTransport = "outbox" | "smtp" | "smtp2go";
 
 export type EmailStatus = "saved" | "sent" | "failed";
 
@@ -61,7 +61,7 @@ export function isEmailStatus(value: string): value is EmailStatus {
 }
 
 export function isEmailTransport(value: string): value is EmailTransport {
-  return value === "outbox" || value === "smtp";
+  return value === "outbox" || value === "smtp" || value === "smtp2go";
 }
 
 export function isEventKind(value: string): value is EventKind {
@@ -178,6 +178,7 @@ export type EmailRecord = {
   transport: EmailTransport;
   status: EmailStatus;
   error: string | null;
+  providerMessageId: string | null;
   createdAt: string;
   sentAt: string | null;
 };

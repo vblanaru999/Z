@@ -52,9 +52,10 @@ CREATE TABLE IF NOT EXISTS emails (
   to_address TEXT NOT NULL,
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
-  transport TEXT NOT NULL CHECK (transport IN ('outbox', 'smtp')),
+  transport TEXT NOT NULL CHECK (transport IN ('outbox', 'smtp', 'smtp2go')),
   status TEXT NOT NULL CHECK (status IN ('saved', 'sent', 'failed')),
   error TEXT,
+  provider_message_id TEXT,
   created_at TEXT NOT NULL,
   sent_at TEXT
 );
@@ -120,8 +121,69 @@ export function openDatabase(filename: string): DatabaseSync {
     db.exec("PRAGMA journal_mode = WAL");
   }
   db.exec(SCHEMA);
+  migrateEmails(db);
   seedClaimTypes(db);
   return db;
+}
+
+/** Older databases only allowed outbox and smtp. Rebuild so SMTP2GO ids can be stored. */
+export function migrateEmails(db: DatabaseSync): void {
+  const table = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'emails'`)
+    .get() as { sql: string } | undefined;
+  if (!table?.sql) return;
+  const columns = db.prepare(`PRAGMA table_info(emails)`).all() as { name: string }[];
+  const hasProviderId = columns.some((column) => column.name === "provider_message_id");
+  const allowsSmtp2Go = table.sql.includes("smtp2go");
+  if (allowsSmtp2Go && hasProviderId) return;
+  if (allowsSmtp2Go && !hasProviderId) {
+    db.exec(`ALTER TABLE emails ADD COLUMN provider_message_id TEXT`);
+    return;
+  }
+
+  const providerSelect = hasProviderId ? "provider_message_id" : "NULL";
+  db.exec("PRAGMA foreign_keys = OFF");
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      CREATE TABLE emails_next (
+        id INTEGER PRIMARY KEY,
+        claim_id INTEGER NOT NULL REFERENCES claims(id),
+        driver_id INTEGER NOT NULL REFERENCES drivers(id),
+        to_address TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        transport TEXT NOT NULL CHECK (transport IN ('outbox', 'smtp', 'smtp2go')),
+        status TEXT NOT NULL CHECK (status IN ('saved', 'sent', 'failed')),
+        error TEXT,
+        provider_message_id TEXT,
+        created_at TEXT NOT NULL,
+        sent_at TEXT
+      )
+    `);
+    db.exec(
+      `INSERT INTO emails_next (
+         id, claim_id, driver_id, to_address, subject, body, transport, status, error,
+         provider_message_id, created_at, sent_at
+       )
+       SELECT id, claim_id, driver_id, to_address, subject, body, transport, status, error,
+              ${providerSelect}, created_at, sent_at
+       FROM emails`,
+    );
+    db.exec("DROP TABLE emails");
+    db.exec("ALTER TABLE emails_next RENAME TO emails");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_emails_claim ON emails(claim_id)");
+    db.exec("COMMIT");
+  } catch (error) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // The transaction may already be closed.
+    }
+    db.exec("PRAGMA foreign_keys = ON");
+    throw error;
+  }
+  db.exec("PRAGMA foreign_keys = ON");
 }
 
 const globalForDb = globalThis as unknown as { claimDb?: DatabaseSync };

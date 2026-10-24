@@ -15,7 +15,23 @@ import { getDb } from "../../../lib/db";
 import { firstParam, formatWhen } from "../../../lib/format";
 import { describeMailMode } from "../../../lib/mailer";
 import { formatMoney } from "../../../lib/money";
-import { SOURCE_LABELS, STATUS_LABELS, allowedActions, type FeeBasis } from "../../../lib/types";
+import {
+  SOURCE_LABELS,
+  STATUS_LABELS,
+  allowedActions,
+  type EmailRecord,
+  type FeeBasis,
+} from "../../../lib/types";
+
+function emailRoute(email: EmailRecord): string {
+  if (email.transport === "outbox") return "Outbox";
+  if (email.transport === "smtp2go") {
+    return email.providerMessageId
+      ? `Accepted by SMTP2GO (${email.providerMessageId})`
+      : "SMTP2GO";
+  }
+  return "SMTP";
+}
 
 export const dynamic = "force-dynamic";
 
@@ -137,7 +153,7 @@ export default async function ClaimDetailPage({
                       <EmailBadge status={email.status} />
                     </div>
                     <p className="hint">
-                      To {email.to} · {email.transport === "outbox" ? "Outbox" : "SMTP"} ·{" "}
+                      To {email.to} · {emailRoute(email)} ·{" "}
                       {formatWhen(email.sentAt ?? email.createdAt)}
                     </p>
                     {email.error ? <p className="banner bad">{email.error}</p> : null}

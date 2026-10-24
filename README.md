@@ -35,7 +35,7 @@ Set `DATABASE_PATH` if the SQLite file should live somewhere other than `data/cl
 
 1. Add a driver: name, email, a default contract fee, and an optional fee for each claim type.
 2. Record a claim: driver, claim type, optional order reference, what went wrong, and when it happened. Recording does not send email.
-3. Open the claim and send the warning. Without SMTP settings, the message is saved in the claim's outbox and the status becomes **Warning sent**. With SMTP settings, the app sends the message.
+3. Open the claim and send the warning. With `SMTP2GO_API_KEY` set, the message goes through SMTP2GO and the claim becomes **Warning sent** only after SMTP2GO accepts it. Without that key, SMTP is used when it is fully configured. Otherwise the message is saved in the claim's outbox and the status becomes **Warning sent**.
 4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
 5. Resolve the claim after the fee, or waive it earlier to close with no fee.
 
@@ -47,7 +47,16 @@ Seeded claim types:
 
 ## Email
 
-Leave SMTP unset to use the outbox. To send for real, set all three of these:
+SMTP2GO is preferred when its API key is set. The app POSTs to `https://api.smtp2go.com/v3/email/send` with the key in `X-Smtp2go-Api-Key`.
+
+| Variable | Purpose |
+| --- | --- |
+| `SMTP2GO_API_KEY` | API key. Leave empty to skip SMTP2GO. |
+| `SMTP2GO_FROM` | From address. Defaults to `claim@bogdandelivery.com`. |
+
+A successful send stores the SMTP2GO email id on the claim. A failed send stays on the claim with SMTP2GO's error, and the status stays **Recorded**.
+
+If the API key is empty, SMTP is the fallback. Set all three of these:
 
 | Variable | Purpose |
 | --- | --- |
@@ -65,7 +74,7 @@ Optional:
 
 If only some of `SMTP_HOST`, `SMTP_PORT`, and `SMTP_FROM` are set, sending fails with an error instead of quietly saving to the outbox. A failed SMTP attempt stays on the claim as a failed outbox row, and the claim stays **Recorded** so you can try again.
 
-Copy `.env.example` to `.env.local`. Next.js loads `.env.local` automatically. Do not commit secrets.
+Copy `.env.example` to `.env`. Next.js loads it automatically. Do not commit secrets. `.env` is gitignored.
 
 ## Tests
 
@@ -73,7 +82,7 @@ Copy `.env.example` to `.env.local`. Next.js loads `.env.local` automatically. D
 npm test
 ```
 
-The tests cover the status path (including blocked steps), fee selection, the outbox, and SMTP success, failure, and partial configuration. The mailer tests pass a fake delivery function, so they do not open a network connection.
+The tests cover the status path (including blocked steps), fee selection, the outbox, SMTP, and mocked SMTP2GO success and failure. They do not open a network connection.
 
 ## Intentionally later
 
@@ -86,6 +95,6 @@ The tests cover the status path (including blocked steps), fee selection, the ou
 - The repository was empty, so this is a Next.js app with TypeScript and SQLite.
 - Fees are USD amounts stored as cents. There is no payment provider and no legal clause beyond the fee record.
 - A warning is required before a fee. Waive closes a claim with no fee from Recorded or Warning sent. Resolve closes it after the fee is applied.
-- When SMTP is not configured, saving the warning in the outbox counts as the warning step.
+- When neither SMTP2GO nor SMTP is configured, saving the warning in the outbox counts as the warning step.
 - There is no authentication. Anyone who can open the app can record claims and send mail.
 - Times are stored in UTC and shown in the server's local timezone.

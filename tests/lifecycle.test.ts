@@ -1,5 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync as Database } from "node:sqlite";
 import { seedClaimTypes, listClaimTypes } from "../src/lib/catalog";
 import {
   applyFee,
@@ -25,7 +29,7 @@ import { claimInputFromForm, driverInputFromForm } from "../src/lib/forms";
 import { createMailer, type Mailer } from "../src/lib/mailer";
 import { formatMoney } from "../src/lib/money";
 
-let db: DatabaseSync;
+let db: Database;
 
 beforeEach(() => {
   db = openDatabase(":memory:");
@@ -269,6 +273,61 @@ describe("lifecycle", () => {
     expect(detail?.emails).toHaveLength(0);
   });
 
+  it("stores the SMTP2GO email id when the API accepts the warning", async () => {
+    const driverId = addDriver();
+    const claimId = addClaim(driverId, typeId("order_not_closed"));
+    const mailer = createMailer(
+      {
+        SMTP2GO_API_KEY: "test-key",
+        SMTP_HOST: "smtp.example.com",
+        SMTP_PORT: "587",
+        SMTP_FROM: "ops@example.com",
+      },
+      {
+        deliverSmtp: async () => {
+          throw new Error("SMTP should not be used when SMTP2GO is configured");
+        },
+        sendSmtp2Go: async (request) => {
+          expect(request.sender).toBe("claim@bogdandelivery.com");
+          expect(request.to).toEqual(["maria.alvarez@example.com"]);
+          expect(request.apiKey).toBe("test-key");
+          return { emailId: "smtp2go-email-1" };
+        },
+      },
+    );
+    await sendWarning(db, claimId, mailer);
+    const detail = getClaimDetail(db, claimId);
+    expect(detail?.status).toBe("warning_sent");
+    expect(detail?.emails[0]).toMatchObject({
+      transport: "smtp2go",
+      status: "sent",
+      providerMessageId: "smtp2go-email-1",
+    });
+    expect(detail?.events.map((event) => event.message).join("\n")).toContain("smtp2go-email-1");
+  });
+
+  it("does not mark the warning sent when SMTP2GO rejects the message", async () => {
+    const driverId = addDriver({ email: "ada@example.com" });
+    const claimId = addClaim(driverId, typeId("label_not_scanned"), "55");
+    const mailer = createMailer(
+      { SMTP2GO_API_KEY: "test-key" },
+      {
+        sendSmtp2Go: async () => {
+          throw new Error("SMTP2GO 400: The from address is not a verified sender");
+        },
+      },
+    );
+    await expect(sendWarning(db, claimId, mailer)).rejects.toThrow(/not a verified sender/);
+    const detail = getClaimDetail(db, claimId);
+    expect(detail?.status).toBe("recorded");
+    expect(detail?.emails[0]).toMatchObject({
+      transport: "smtp2go",
+      status: "failed",
+    });
+    expect(detail?.emails[0]?.error).toContain("not a verified sender");
+    expect(detail?.events.some((event) => event.kind === "status_change")).toBe(false);
+  });
+
   it("marks the warning sent when SMTP delivery succeeds", async () => {
     const driverId = addDriver();
     const claimId = addClaim(driverId, typeId("order_not_closed"));
@@ -378,5 +437,51 @@ describe("warning copy", () => {
     expect(email.text).toContain("does not apply a fee");
     expect(email.text).toContain("$20.00");
     expect(email.text).toContain("claim 12");
+  });
+});
+
+describe("email table migration", () => {
+  it("keeps existing outbox rows and allows an SMTP2GO id", () => {
+    const file = path.join(
+      os.tmpdir(),
+      `claim-emails-${Date.now()}-${Math.random().toString(16).slice(2)}.db`,
+    );
+    const initial = new DatabaseSync(file);
+    initial.exec(`
+      CREATE TABLE emails (
+        id INTEGER PRIMARY KEY,
+        claim_id INTEGER NOT NULL,
+        driver_id INTEGER NOT NULL,
+        to_address TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        transport TEXT NOT NULL CHECK (transport IN ('outbox', 'smtp')),
+        status TEXT NOT NULL CHECK (status IN ('saved', 'sent', 'failed')),
+        error TEXT,
+        created_at TEXT NOT NULL,
+        sent_at TEXT
+      );
+      INSERT INTO emails (
+        claim_id, driver_id, to_address, subject, body, transport, status, created_at
+      ) VALUES (
+        1, 1, 'a@b.co', 'Hi', 'Body', 'outbox', 'saved', '2026-10-24T00:00:00.000Z'
+      );
+    `);
+    initial.close();
+
+    const upgraded = openDatabase(file);
+    const definition = upgraded
+      .prepare(`SELECT sql FROM sqlite_master WHERE name = 'emails'`)
+      .get() as { sql: string };
+    expect(definition.sql).toContain("smtp2go");
+    expect(definition.sql).toContain("provider_message_id");
+    const kept = upgraded
+      .prepare(`SELECT transport, provider_message_id FROM emails WHERE id = 1`)
+      .get() as { transport: string; provider_message_id: string | null };
+    expect(kept).toEqual({ transport: "outbox", provider_message_id: null });
+    upgraded.close();
+    for (const suffix of ["", "-wal", "-shm"]) {
+      fs.rmSync(file + suffix, { force: true });
+    }
   });
 });

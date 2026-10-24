@@ -200,6 +200,7 @@ function mapEmail(row: SqlRow): EmailRecord {
     transport,
     status,
     error: rowStringOrNull(row, "error"),
+    providerMessageId: rowStringOrNull(row, "provider_message_id"),
     createdAt: rowString(row, "created_at"),
     sentAt: rowStringOrNull(row, "sent_at"),
   };
@@ -263,7 +264,8 @@ export function getClaimDetail(db: DatabaseSync, id: number): ClaimDetail | unde
   const emails = (
     db
       .prepare(
-        `SELECT id, claim_id, driver_id, to_address, subject, body, transport, status, error, created_at, sent_at
+        `SELECT id, claim_id, driver_id, to_address, subject, body, transport, status, error,
+                provider_message_id, created_at, sent_at
          FROM emails
          WHERE claim_id = ?
          ORDER BY id ASC`,
@@ -386,8 +388,9 @@ export async function sendWarning(
     const emailResult = db
       .prepare(
         `INSERT INTO emails (
-           claim_id, driver_id, to_address, subject, body, transport, status, error, created_at, sent_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           claim_id, driver_id, to_address, subject, body, transport, status, error,
+           provider_message_id, created_at, sent_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         claimId,
@@ -398,6 +401,7 @@ export async function sendWarning(
         audit.transport,
         audit.status,
         audit.error,
+        audit.providerMessageId,
         now,
         result.status === "sent" ? now : null,
       );
@@ -430,7 +434,7 @@ export async function sendWarning(
 
   if (result.status === "failed") {
     throw new AppError(
-      `The warning was not sent (${result.error}). The attempt is in the outbox. You can try again.`,
+      `The warning was not sent (${result.error}). The claim is still recorded. You can try again.`,
     );
   }
 }
