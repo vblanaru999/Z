@@ -1,4 +1,5 @@
 import { listClaimTypes } from "../src/lib/catalog";
+import { localDateInputValue } from "../src/lib/format";
 import { createClaim, listClaims } from "../src/lib/claims";
 import { databasePath, openDatabase } from "../src/lib/db";
 import { createDriver, getDriverByEmail } from "../src/lib/drivers";
@@ -44,7 +45,7 @@ if (maria && !existing.some((claim) => claim.orderReference === "48219")) {
     claimTypeId: closed.id,
     orderReference: "48219",
     notes: "The stop was finished, but order 48219 was still open in the driver app.",
-    occurredAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
+    occurredAt: localDateInputValue(new Date(Date.now() - 26 * 60 * 60 * 1000)),
   });
   console.log(`Recorded sample claim #${id} for order 48219.`);
 } else {

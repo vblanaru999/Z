@@ -4,7 +4,7 @@ import { PageHeader } from "../../../components/PageHeader";
 import { listClaimTypes } from "../../../lib/catalog";
 import { getDb } from "../../../lib/db";
 import { listDrivers } from "../../../lib/drivers";
-import { localDateTimeInputValue } from "../../../lib/format";
+import { localDateInputValue } from "../../../lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Record a claim" };
@@ -35,7 +35,7 @@ export default function NewClaimPage() {
           <ClaimForm
             drivers={drivers}
             claimTypes={claimTypes}
-            defaultOccurredAt={localDateTimeInputValue()}
+            defaultOccurredAt={localDateInputValue()}
           />
         </section>
       )}

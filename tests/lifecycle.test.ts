@@ -25,6 +25,7 @@ import {
 } from "../src/lib/drivers";
 import { buildWarningEmail } from "../src/lib/email-copy";
 import { AppError } from "../src/lib/errors";
+import { formatIncidentDate, formatWhen } from "../src/lib/format";
 import { claimInputFromForm, driverInputFromForm } from "../src/lib/forms";
 import { createMailer, type Mailer } from "../src/lib/mailer";
 import { formatMoney } from "../src/lib/money";
@@ -172,6 +173,9 @@ describe("lifecycle", () => {
       subject: "Warning: Poor or missing delivery photo attached to the order",
     });
     const body = detail?.emails[0]?.body ?? "";
+    const whenLine = body.split("\n").find((line) => line.startsWith("When:"));
+    expect(whenLine).toBe(`When: ${formatIncidentDate(detail!.occurredAt)}`);
+    expect(whenLine).toMatch(/^When: [A-Z][a-z]{2} \d{1,2}, \d{4}$/);
     expect(body).toContain("Maria Alvarez");
     expect(body).toContain("Poor or missing delivery photo attached to the order");
     expect(body).toContain("Order reference: 48219");
@@ -403,15 +407,69 @@ describe("lifecycle", () => {
     form.set("claimTypeId", String(typeId("order_not_closed")));
     form.set("orderReference", "  ");
     form.set("notes", "Left the order open.");
-    form.set("occurredAt", "2026-10-24T09:30");
+    form.set("occurredAt", "2026-10-24");
     const input = claimInputFromForm(form);
     expect(input.orderReference).toBeNull();
     expect(input.notes).toBe("Left the order open.");
+    expect(input.occurredAt).toBe("2026-10-24");
     const id = createClaim(db, input);
-    expect(getClaimDetail(db, id)?.source).toBe("manual");
-    expect(getClaimDetail(db, id)?.orderReference).toBeNull();
+    const saved = getClaimDetail(db, id);
+    expect(saved?.source).toBe("manual");
+    expect(saved?.orderReference).toBeNull();
+    expect(saved?.occurredAt).toBe("2026-10-24");
+  });
+
+  it("stores a calendar date and shows an older timestamp as that date only", () => {
+    const driverId = addDriver();
+    const claimTypeId = typeId("order_not_closed");
+    const stamp = "2026-10-23T20:10:00.000Z";
+    const inserted = db
+      .prepare(
+        `INSERT INTO claims (
+           driver_id, claim_type_id, notes, occurred_at, status, source, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, 'recorded', 'manual', ?, ?)`,
+      )
+      .run(driverId, claimTypeId, "Already on file.", stamp, stamp, stamp);
+    const oldId = Number(inserted.lastInsertRowid);
+    expect(getClaimDetail(db, oldId)?.occurredAt).toBe(stamp);
+    const shown = formatIncidentDate(stamp);
+    expect(shown).toBe(
+      new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(stamp)),
+    );
+    expect(shown).not.toMatch(/\d:\d{2}|AM|PM/);
+    expect(formatWhen(stamp)).toMatch(/\d:\d{2}|AM|PM/);
+    expect(formatIncidentDate("2026-10-24")).toBe("Oct 24, 2026");
+
+    expect(() => claimInputFromForm(formWithDate(driverId, claimTypeId, "2026-02-31"))).toThrow(
+      /valid date/,
+    );
+    expect(() => claimInputFromForm(formWithDate(driverId, claimTypeId, ""))).toThrow(
+      /when this happened/i,
+    );
+
+    const created = createClaim(db, {
+      driverId,
+      claimTypeId,
+      orderReference: null,
+      notes: "Recorded with a date only.",
+      occurredAt: stamp,
+    });
+    const date = new Date(stamp);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    expect(getClaimDetail(db, created)?.occurredAt).toBe(
+      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    );
   });
 });
+
+function formWithDate(driverId: number, claimTypeId: number, occurredAt: string): FormData {
+  const form = new FormData();
+  form.set("driverId", String(driverId));
+  form.set("claimTypeId", String(claimTypeId));
+  form.set("notes", "Left the order open.");
+  form.set("occurredAt", occurredAt);
+  return form;
+}
 
 describe("warning copy", () => {
   it("names the failure, the order, and that a contract fee can follow", () => {
@@ -420,7 +478,7 @@ describe("warning copy", () => {
       driverName: "James Okonkwo",
       driverEmail: "james@example.com",
       claimTypeLabel: "Delivery label not scanned",
-      occurredAt: "2026-10-23T20:10:00.000Z",
+      occurredAt: "2026-10-23",
       orderReference: "10910",
       notes: "The label was still in the cab.",
       feeAmountCents: 2000,
@@ -437,6 +495,8 @@ describe("warning copy", () => {
     expect(email.text).toContain("does not apply a fee");
     expect(email.text).toContain("$20.00");
     expect(email.text).toContain("claim 12");
+    const whenLine = email.text.split("\n").find((line) => line.startsWith("When:"));
+    expect(whenLine).toBe("When: Oct 23, 2026");
   });
 });
 

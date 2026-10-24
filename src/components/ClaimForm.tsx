@@ -54,7 +54,7 @@ export function ClaimForm({
         </label>
         <label className="field">
           When it happened
-          <input type="datetime-local" name="occurredAt" required defaultValue={defaultOccurredAt} />
+          <input type="date" name="occurredAt" required defaultValue={defaultOccurredAt} />
         </label>
       </div>
       <label className="field">

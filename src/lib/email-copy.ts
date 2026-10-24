@@ -1,5 +1,5 @@
 import { formatMoney } from "./money";
-import { formatWhen } from "./format";
+import { formatIncidentDate } from "./format";
 import type { FeeBasis } from "./types";
 
 export type WarningEmailInput = {
@@ -44,7 +44,7 @@ export function buildWarningEmail(input: WarningEmailInput): WarningEmail {
     "This is a formal warning. A delivery procedure was not followed.",
     "",
     `What was not done: ${input.claimTypeLabel}`,
-    `When: ${formatWhen(input.occurredAt)}`,
+    `When: ${formatIncidentDate(input.occurredAt)}`,
     `${orderLine}What went wrong: ${input.notes}`,
     "",
     "This message is a warning. It does not apply a fee. Repeated issues can incur the fee in your contract.",

@@ -1,4 +1,5 @@
 import { AppError } from "./errors";
+import { parseIncidentDate } from "./format";
 import { parseFeeToCents, parseOptionalFeeToCents } from "./money";
 import type { ClaimInput, ClaimType, DriverInput } from "./types";
 
@@ -38,18 +39,12 @@ export function claimInputFromForm(formData: FormData): ClaimInput {
   if (orderRaw.length > 80) {
     throw new AppError("Keep the order reference under 80 characters.");
   }
-  const occurredRaw = String(formData.get("occurredAt") ?? "").trim();
-  if (!occurredRaw) throw new AppError("Enter when this happened.");
-  const occurred = new Date(occurredRaw);
-  if (Number.isNaN(occurred.getTime())) {
-    throw new AppError("Enter a valid date and time.");
-  }
   return {
     driverId,
     claimTypeId,
     orderReference: orderRaw || null,
     notes: String(formData.get("notes") ?? ""),
-    occurredAt: occurred.toISOString(),
+    occurredAt: parseIncidentDate(String(formData.get("occurredAt") ?? "")),
   };
 }
 

@@ -12,7 +12,7 @@ import { EmailBadge, SourceBadge, StatusBadge } from "../../../components/Status
 import { SubmitButton } from "../../../components/SubmitButton";
 import { getClaimDetail, warningEmailForClaim } from "../../../lib/claims";
 import { getDb } from "../../../lib/db";
-import { firstParam, formatWhen } from "../../../lib/format";
+import { firstParam, formatIncidentDate, formatWhen } from "../../../lib/format";
 import { describeMailMode } from "../../../lib/mailer";
 import { formatMoney } from "../../../lib/money";
 import {
@@ -91,7 +91,7 @@ export default async function ClaimDetailPage({
               </div>
               <div>
                 <dt>When</dt>
-                <dd>{formatWhen(claim.occurredAt)}</dd>
+                <dd>{formatIncidentDate(claim.occurredAt)}</dd>
               </div>
               <div>
                 <dt>Order</dt>

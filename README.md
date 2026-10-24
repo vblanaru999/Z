@@ -97,4 +97,4 @@ The tests cover the status path (including blocked steps), fee selection, the ou
 - A warning is required before a fee. Waive closes a claim with no fee from Recorded or Warning sent. Resolve closes it after the fee is applied.
 - When neither SMTP2GO nor SMTP is configured, saving the warning in the outbox counts as the warning step.
 - There is no authentication. Anyone who can open the app can record claims and send mail.
-- Times are stored in UTC and shown in the server's local timezone.
+- The day a claim happened is stored as a calendar date and shown without a time. Warning sent, fee applied, and other audit times are stored in UTC and shown in the server's local timezone.

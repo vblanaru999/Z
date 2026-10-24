@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatWhen } from "../lib/format";
+import { formatIncidentDate } from "../lib/format";
 import type { ClaimListItem } from "../lib/types";
 import { SourceBadge, StatusBadge } from "./StatusBadge";
 
@@ -32,7 +32,7 @@ export function ClaimsTable({
         <tbody>
           {claims.map((claim) => (
             <tr key={claim.id}>
-              <td data-label="When">{formatWhen(claim.occurredAt)}</td>
+              <td data-label="When">{formatIncidentDate(claim.occurredAt)}</td>
               {showDriver ? <td data-label="Driver">{claim.driverName}</td> : null}
               <td data-label="What happened">
                 <Link href={`/claims/${claim.id}`} className="row-link">

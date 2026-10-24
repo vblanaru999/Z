@@ -4,7 +4,7 @@ import { changed, insertId, withTransaction } from "./db";
 import { buildWarningEmail, type WarningEmail } from "./email-copy";
 import { emailAuditMessage, type Mailer } from "./mailer";
 import { AppError } from "./errors";
-import { nowIso } from "./format";
+import { nowIso, parseIncidentDate } from "./format";
 import { contractFee, getDriver, typeFeeCents } from "./drivers";
 import { formatMoney } from "./money";
 import { rowNumber, rowNumberOrNull, rowString, rowStringOrNull, type SqlRow } from "./rows";
@@ -87,10 +87,7 @@ export function createClaim(db: DatabaseSync, input: ClaimInput): number {
   if (orderReference && orderReference.length > 80) {
     throw new AppError("Keep the order reference under 80 characters.");
   }
-  const occurred = new Date(input.occurredAt);
-  if (Number.isNaN(occurred.getTime())) {
-    throw new AppError("Enter a valid date and time.");
-  }
+  const occurredAt = parseIncidentDate(input.occurredAt);
 
   return withTransaction(db, () => {
     const now = nowIso();
@@ -106,7 +103,7 @@ export function createClaim(db: DatabaseSync, input: ClaimInput): number {
         claimType.id,
         orderReference,
         notes,
-        occurred.toISOString(),
+        occurredAt,
         now,
         now,
       );
