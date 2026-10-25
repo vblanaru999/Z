@@ -11,7 +11,7 @@ import { PageHeader } from "../../../components/PageHeader";
 import { EmailBadge, SourceBadge, StatusBadge } from "../../../components/StatusBadge";
 import { SubmitButton } from "../../../components/SubmitButton";
 import { getClaimDetail, warningEmailForClaim } from "../../../lib/claims";
-import { getDb } from "../../../lib/db";
+import { getStore } from "../../../lib/db";
 import { firstParam, formatWhen } from "../../../lib/format";
 import { describeMailMode } from "../../../lib/mailer";
 import { formatMoney } from "../../../lib/money";
@@ -50,7 +50,7 @@ export default async function ClaimDetailPage({
   const query = await searchParams;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const claim = getClaimDetail(getDb(), id);
+  const claim = await getClaimDetail(await getStore(), id);
   if (!claim) notFound();
 
   const actions = allowedActions(claim.status);

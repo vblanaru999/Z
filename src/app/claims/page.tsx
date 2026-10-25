@@ -3,7 +3,7 @@ import { ClaimsTable } from "../../components/ClaimsTable";
 import { PageHeader } from "../../components/PageHeader";
 import { listClaimTypes } from "../../lib/catalog";
 import { listClaims } from "../../lib/claims";
-import { getDb } from "../../lib/db";
+import { getStore } from "../../lib/db";
 import { listDrivers } from "../../lib/drivers";
 import { firstParam } from "../../lib/format";
 import { CLAIM_STATUSES, STATUS_LABELS, isClaimStatus, type ClaimFilter } from "../../lib/types";
@@ -17,9 +17,9 @@ export default async function ClaimsPage({
   searchParams: Promise<{ driver?: string | string[]; type?: string | string[]; status?: string | string[] }>;
 }) {
   const query = await searchParams;
-  const db = getDb();
-  const drivers = listDrivers(db);
-  const types = listClaimTypes(db);
+  const db = await getStore();
+  const drivers = await listDrivers(db);
+  const types = await listClaimTypes(db);
   const driverRaw = firstParam(query.driver);
   const typeRaw = firstParam(query.type);
   const statusRaw = firstParam(query.status);
@@ -29,7 +29,7 @@ export default async function ClaimsPage({
   if (driverRaw && Number.isInteger(driverId)) filter.driverId = driverId;
   if (typeRaw && Number.isInteger(claimTypeId)) filter.claimTypeId = claimTypeId;
   if (statusRaw && isClaimStatus(statusRaw)) filter.status = statusRaw;
-  const claims = listClaims(db, filter);
+  const claims = await listClaims(db, filter);
 
   return (
     <>

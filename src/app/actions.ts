@@ -10,7 +10,7 @@ import {
   sendWarning,
   waiveClaim,
 } from "../lib/claims";
-import { getDb } from "../lib/db";
+import { getStore } from "../lib/db";
 import { createDriver, updateDriver } from "../lib/drivers";
 import { AppError } from "../lib/errors";
 import {
@@ -39,18 +39,18 @@ export async function saveDriverAction(
   _previous: { error: string | null },
   formData: FormData,
 ): Promise<{ error: string | null }> {
-  const db = getDb();
+  const db = await getStore();
   const idRaw = String(formData.get("id") ?? "").trim();
   let savedId: number | undefined;
   try {
-    const input = driverInputFromForm(formData, listClaimTypes(db));
+    const input = driverInputFromForm(formData, await listClaimTypes(db));
     if (idRaw) {
       const id = Number(idRaw);
       if (!Number.isInteger(id) || id <= 0) return { error: "Driver not found." };
-      updateDriver(db, id, input);
+      await updateDriver(db, id, input);
       savedId = id;
     } else {
-      savedId = createDriver(db, input);
+      savedId = await createDriver(db, input);
     }
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
@@ -66,10 +66,10 @@ export async function createClaimAction(
   _previous: { error: string | null },
   formData: FormData,
 ): Promise<{ error: string | null }> {
-  const db = getDb();
+  const db = await getStore();
   let claimId: number | undefined;
   try {
-    claimId = createClaim(db, claimInputFromForm(formData));
+    claimId = await createClaim(db, claimInputFromForm(formData));
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
     throw error;
@@ -79,7 +79,7 @@ export async function createClaimAction(
 }
 
 export async function sendWarningAction(formData: FormData): Promise<void> {
-  const db = getDb();
+  const db = await getStore();
   let id = 0;
   try {
     id = claimIdFromForm(formData);
@@ -92,11 +92,11 @@ export async function sendWarningAction(formData: FormData): Promise<void> {
 }
 
 export async function applyFeeAction(formData: FormData): Promise<void> {
-  const db = getDb();
+  const db = await getStore();
   let id = 0;
   try {
     id = claimIdFromForm(formData);
-    applyFee(db, id);
+    await applyFee(db, id);
   } catch (error) {
     bail(id > 0 ? `/claims/${id}` : "/claims", error);
   }
@@ -105,11 +105,11 @@ export async function applyFeeAction(formData: FormData): Promise<void> {
 }
 
 export async function resolveClaimAction(formData: FormData): Promise<void> {
-  const db = getDb();
+  const db = await getStore();
   let id = 0;
   try {
     id = claimIdFromForm(formData);
-    resolveClaim(db, id, noteFromForm(formData));
+    await resolveClaim(db, id, noteFromForm(formData));
   } catch (error) {
     bail(id > 0 ? `/claims/${id}` : "/claims", error);
   }
@@ -118,11 +118,11 @@ export async function resolveClaimAction(formData: FormData): Promise<void> {
 }
 
 export async function waiveClaimAction(formData: FormData): Promise<void> {
-  const db = getDb();
+  const db = await getStore();
   let id = 0;
   try {
     id = claimIdFromForm(formData);
-    waiveClaim(db, id, noteFromForm(formData));
+    await waiveClaim(db, id, noteFromForm(formData));
   } catch (error) {
     bail(id > 0 ? `/claims/${id}` : "/claims", error);
   }

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { PageHeader } from "../../components/PageHeader";
-import { getDb } from "../../lib/db";
+import { getStore } from "../../lib/db";
 import { listDrivers } from "../../lib/drivers";
 import { formatMoney } from "../../lib/money";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Drivers" };
 
-export default function DriversPage() {
-  const drivers = listDrivers(getDb());
+export default async function DriversPage() {
+  const drivers = await listDrivers(await getStore());
 
   return (
     <>

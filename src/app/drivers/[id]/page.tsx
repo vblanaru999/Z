@@ -6,7 +6,7 @@ import { DriverForm } from "../../../components/DriverForm";
 import { PageHeader } from "../../../components/PageHeader";
 import { listClaimTypes } from "../../../lib/catalog";
 import { listClaims } from "../../../lib/claims";
-import { getDb } from "../../../lib/db";
+import { getStore } from "../../../lib/db";
 import { getDriver, listDriverFees } from "../../../lib/drivers";
 import { firstParam } from "../../../lib/format";
 
@@ -23,10 +23,10 @@ export default async function EditDriverPage({
   const query = await searchParams;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const db = getDb();
-  const driver = getDriver(db, id);
+  const db = await getStore();
+  const driver = await getDriver(db, id);
   if (!driver) notFound();
-  const claims = listClaims(db, { driverId: id });
+  const claims = await listClaims(db, { driverId: id });
 
   return (
     <>
@@ -44,8 +44,8 @@ export default async function EditDriverPage({
       <section className="panel">
         <DriverForm
           driver={driver}
-          claimTypes={listClaimTypes(db)}
-          typeFees={listDriverFees(db, id)}
+          claimTypes={await listClaimTypes(db)}
+          typeFees={await listDriverFees(db, id)}
         />
       </section>
       <section className="panel" style={{ marginTop: 16 }}>

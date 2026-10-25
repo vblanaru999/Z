@@ -1,13 +1,13 @@
 import { DriverForm } from "../../../components/DriverForm";
 import { PageHeader } from "../../../components/PageHeader";
 import { listClaimTypes } from "../../../lib/catalog";
-import { getDb } from "../../../lib/db";
+import { getStore } from "../../../lib/db";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Add a driver" };
 
-export default function NewDriverPage() {
-  const claimTypes = listClaimTypes(getDb());
+export default async function NewDriverPage() {
+  const claimTypes = await listClaimTypes(await getStore());
   return (
     <>
       <PageHeader

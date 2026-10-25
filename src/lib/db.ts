@@ -1,196 +1,55 @@
-import fs from "node:fs";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { seedClaimTypes } from "./catalog";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { AppError } from "./errors";
+import { createSupabaseStore } from "./supabase-store";
+import type { Store } from "./store";
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS claim_types (
-  id INTEGER PRIMARY KEY,
-  code TEXT NOT NULL UNIQUE,
-  label TEXT NOT NULL,
-  description TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS drivers (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  default_fee_cents INTEGER NOT NULL CHECK (default_fee_cents >= 0),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS driver_fee_terms (
-  driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
-  claim_type_id INTEGER NOT NULL REFERENCES claim_types(id),
-  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
-  PRIMARY KEY (driver_id, claim_type_id)
-);
-
--- source 'manual' is written by this app. 'xcelerator' is reserved for a later import.
-CREATE TABLE IF NOT EXISTS claims (
-  id INTEGER PRIMARY KEY,
-  driver_id INTEGER NOT NULL REFERENCES drivers(id),
-  claim_type_id INTEGER NOT NULL REFERENCES claim_types(id),
-  order_reference TEXT,
-  notes TEXT NOT NULL,
-  occurred_at TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('recorded', 'warning_sent', 'fee_applied', 'resolved', 'waived')),
-  source TEXT NOT NULL CHECK (source IN ('manual', 'xcelerator')),
-  fee_amount_cents INTEGER,
-  fee_applied_at TEXT,
-  fee_basis TEXT CHECK (fee_basis IN ('default', 'claim_type') OR fee_basis IS NULL),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS emails (
-  id INTEGER PRIMARY KEY,
-  claim_id INTEGER NOT NULL REFERENCES claims(id),
-  driver_id INTEGER NOT NULL REFERENCES drivers(id),
-  to_address TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  body TEXT NOT NULL,
-  transport TEXT NOT NULL CHECK (transport IN ('outbox', 'smtp', 'smtp2go')),
-  status TEXT NOT NULL CHECK (status IN ('saved', 'sent', 'failed')),
-  error TEXT,
-  provider_message_id TEXT,
-  created_at TEXT NOT NULL,
-  sent_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS claim_events (
-  id INTEGER PRIMARY KEY,
-  claim_id INTEGER NOT NULL REFERENCES claims(id),
-  kind TEXT NOT NULL CHECK (kind IN ('created', 'status_change', 'email')),
-  from_status TEXT,
-  to_status TEXT,
-  message TEXT NOT NULL,
-  email_id INTEGER REFERENCES emails(id),
-  created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
-CREATE INDEX IF NOT EXISTS idx_claims_driver ON claims(driver_id);
-CREATE INDEX IF NOT EXISTS idx_claims_type ON claims(claim_type_id);
-CREATE INDEX IF NOT EXISTS idx_events_claim ON claim_events(claim_id);
-CREATE INDEX IF NOT EXISTS idx_emails_claim ON emails(claim_id);
-`;
-
-export function databasePath(): string {
-  const configured = process.env.DATABASE_PATH?.trim();
-  if (configured) return configured;
-  return path.join(process.cwd(), "data", "claim.db");
-}
-
-export function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const result = fn();
-    db.exec("COMMIT");
-    return result;
-  } catch (error) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      // The transaction may already be closed.
-    }
-    throw error;
-  }
-}
-
-export function insertId(result: { lastInsertRowid: number | bigint }): number {
-  return typeof result.lastInsertRowid === "bigint"
-    ? Number(result.lastInsertRowid)
-    : result.lastInsertRowid;
-}
-
-export function changed(result: { changes: number | bigint }): number {
-  return typeof result.changes === "bigint" ? Number(result.changes) : result.changes;
-}
-
-export function openDatabase(filename: string): DatabaseSync {
-  if (filename !== ":memory:") {
-    fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true });
-  }
-  const db = new DatabaseSync(filename, { enableForeignKeyConstraints: true });
-  db.exec("PRAGMA foreign_keys = ON");
-  db.exec("PRAGMA busy_timeout = 5000");
-  if (filename !== ":memory:") {
-    db.exec("PRAGMA journal_mode = WAL");
-  }
-  db.exec(SCHEMA);
-  migrateEmails(db);
-  seedClaimTypes(db);
-  return db;
-}
-
-/** Older databases only allowed outbox and smtp. Rebuild so SMTP2GO ids can be stored. */
-export function migrateEmails(db: DatabaseSync): void {
-  const table = db
-    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'emails'`)
-    .get() as { sql: string } | undefined;
-  if (!table?.sql) return;
-  const columns = db.prepare(`PRAGMA table_info(emails)`).all() as { name: string }[];
-  const hasProviderId = columns.some((column) => column.name === "provider_message_id");
-  const allowsSmtp2Go = table.sql.includes("smtp2go");
-  if (allowsSmtp2Go && hasProviderId) return;
-  if (allowsSmtp2Go && !hasProviderId) {
-    db.exec(`ALTER TABLE emails ADD COLUMN provider_message_id TEXT`);
-    return;
-  }
-
-  const providerSelect = hasProviderId ? "provider_message_id" : "NULL";
-  db.exec("PRAGMA foreign_keys = OFF");
-  db.exec("BEGIN");
-  try {
-    db.exec(`
-      CREATE TABLE emails_next (
-        id INTEGER PRIMARY KEY,
-        claim_id INTEGER NOT NULL REFERENCES claims(id),
-        driver_id INTEGER NOT NULL REFERENCES drivers(id),
-        to_address TEXT NOT NULL,
-        subject TEXT NOT NULL,
-        body TEXT NOT NULL,
-        transport TEXT NOT NULL CHECK (transport IN ('outbox', 'smtp', 'smtp2go')),
-        status TEXT NOT NULL CHECK (status IN ('saved', 'sent', 'failed')),
-        error TEXT,
-        provider_message_id TEXT,
-        created_at TEXT NOT NULL,
-        sent_at TEXT
-      )
-    `);
-    db.exec(
-      `INSERT INTO emails_next (
-         id, claim_id, driver_id, to_address, subject, body, transport, status, error,
-         provider_message_id, created_at, sent_at
-       )
-       SELECT id, claim_id, driver_id, to_address, subject, body, transport, status, error,
-              ${providerSelect}, created_at, sent_at
-       FROM emails`,
+/**
+ * Server-side Supabase client. Uses the secret key only.
+ * The publishable key is not read and must not be sent to the browser.
+ */
+export function createClaimSupabaseClient(
+  env: Record<string, string | undefined>,
+): SupabaseClient {
+  const url = env.SUPABASE_URL?.trim() ?? "";
+  const key = env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
+  if (!url || !key) {
+    throw new AppError(
+      "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before Claim can load data.",
     );
-    db.exec("DROP TABLE emails");
-    db.exec("ALTER TABLE emails_next RENAME TO emails");
-    db.exec("CREATE INDEX IF NOT EXISTS idx_emails_claim ON emails(claim_id)");
-    db.exec("COMMIT");
-  } catch (error) {
-    try {
-      db.exec("ROLLBACK");
-    } catch {
-      // The transaction may already be closed.
-    }
-    db.exec("PRAGMA foreign_keys = ON");
-    throw error;
   }
-  db.exec("PRAGMA foreign_keys = ON");
+  return createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
-const globalForDb = globalThis as unknown as { claimDb?: DatabaseSync };
+let storePromise: Promise<Store> | undefined;
 
-export function getDb(): DatabaseSync {
-  if (!globalForDb.claimDb) {
-    globalForDb.claimDb = openDatabase(databasePath());
+export function getStore(): Promise<Store> {
+  if (!storePromise) {
+    storePromise = openStore().catch((error: unknown) => {
+      storePromise = undefined;
+      throw error;
+    });
   }
-  return globalForDb.claimDb;
+  return storePromise;
+}
+
+async function openStore(): Promise<Store> {
+  const store = createSupabaseStore(createClaimSupabaseClient(process.env));
+  try {
+    await store.seedClaimTypes();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/schema cache|could not find the table/i.test(message)) {
+      throw new AppError(
+        "Supabase is connected, but the Claim tables are missing. Run supabase/schema.sql in the Supabase SQL editor, then reload.",
+      );
+    }
+    throw error;
+  }
+  return store;
 }
