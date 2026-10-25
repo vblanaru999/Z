@@ -1,6 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
-import { nowIso } from "./format";
-import { rowNumber, rowString, type SqlRow } from "./rows";
+import type { Store } from "./store";
 import type { ClaimType } from "./types";
 
 export const CLAIM_TYPE_SEEDS: readonly {
@@ -26,47 +24,14 @@ export const CLAIM_TYPE_SEEDS: readonly {
   },
 ];
 
-export function seedClaimTypes(db: DatabaseSync): void {
-  const insert = db.prepare(
-    `INSERT INTO claim_types (code, label, description, created_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(code) DO UPDATE SET
-       label = excluded.label,
-       description = excluded.description`,
-  );
-  const createdAt = nowIso();
-  for (const type of CLAIM_TYPE_SEEDS) {
-    insert.run(type.code, type.label, type.description, createdAt);
-  }
+export function seedClaimTypes(store: Store): Promise<void> {
+  return store.seedClaimTypes();
 }
 
-function mapClaimType(row: SqlRow): ClaimType {
-  return {
-    id: rowNumber(row, "id"),
-    code: rowString(row, "code"),
-    label: rowString(row, "label"),
-    description: rowString(row, "description"),
-  };
+export function listClaimTypes(store: Store): Promise<ClaimType[]> {
+  return store.listClaimTypes();
 }
 
-export function listClaimTypes(db: DatabaseSync): ClaimType[] {
-  const rows = db
-    .prepare(
-      `SELECT id, code, label, description
-       FROM claim_types
-       ORDER BY id ASC`,
-    )
-    .all() as SqlRow[];
-  return rows.map(mapClaimType);
-}
-
-export function getClaimType(db: DatabaseSync, id: number): ClaimType | undefined {
-  const row = db
-    .prepare(
-      `SELECT id, code, label, description
-       FROM claim_types
-       WHERE id = ?`,
-    )
-    .get(id) as SqlRow | undefined;
-  return row ? mapClaimType(row) : undefined;
+export function getClaimType(store: Store, id: number): Promise<ClaimType | undefined> {
+  return store.getClaimType(id);
 }

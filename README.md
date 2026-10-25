@@ -6,7 +6,7 @@ Data entry is manual. Each claim has a `source`: `manual` today, with `xcelerato
 
 ## Run it
 
-Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite` module).
+Requires Node.js 22.13 or newer.
 
 ```bash
 npm install
@@ -14,9 +14,20 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The database is created at `data/claim.db` on first use, with the three claim types already loaded. There is no login.
+Open [http://localhost:3000](http://localhost:3000). There is no login.
 
-Optional sample drivers and one recorded claim:
+Data lives in Supabase, not in a local database file. Copy `.env.example` to `.env` and set:
+
+| Variable | Purpose |
+| --- | --- |
+| `SUPABASE_URL` | Project URL. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret key, used only on the server. |
+
+Do not put the publishable key in `SUPABASE_SERVICE_ROLE_KEY`. The browser never receives the secret key.
+
+Before the first run, open the Supabase SQL editor and run `supabase/schema.sql`. That creates the tables, indexes, and the three claim types, and turns on row level security so the publishable key cannot read them. The app cannot load drivers or claims until those variables are set and that SQL has been run.
+
+Optional sample drivers and one recorded claim (needs the variables above):
 
 ```bash
 npm run db:seed
@@ -28,8 +39,6 @@ Production build:
 npm run build
 npm start
 ```
-
-Set `DATABASE_PATH` if the SQLite file should live somewhere other than `data/claim.db`.
 
 ## What you can do
 
@@ -82,7 +91,7 @@ Copy `.env.example` to `.env`. Next.js loads it automatically. Do not commit sec
 npm test
 ```
 
-The tests cover the status path (including blocked steps), fee selection, the outbox, SMTP, and mocked SMTP2GO success and failure. They do not open a network connection.
+The tests cover the status path (including blocked steps), fee selection, the outbox, SMTP, and mocked SMTP2GO success and failure. They use an in-memory store and a mocked Supabase client. They do not open a network connection.
 
 ## Intentionally later
 
@@ -92,7 +101,7 @@ The tests cover the status path (including blocked steps), fee selection, the ou
 
 ## Assumptions
 
-- The repository was empty, so this is a Next.js app with TypeScript and SQLite.
+- The repository was empty, so this is a Next.js app with TypeScript. Drivers, claims, emails, and history are stored in Supabase.
 - Fees are USD amounts stored as cents. There is no payment provider and no legal clause beyond the fee record.
 - A warning is required before a fee. Waive closes a claim with no fee from Recorded or Warning sent. Resolve closes it after the fee is applied.
 - When neither SMTP2GO nor SMTP is configured, saving the warning in the outbox counts as the warning step.

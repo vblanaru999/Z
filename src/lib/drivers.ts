@@ -1,9 +1,7 @@
-import type { DatabaseSync } from "node:sqlite";
 import { listClaimTypes } from "./catalog";
-import { insertId, withTransaction } from "./db";
 import { AppError } from "./errors";
 import { nowIso } from "./format";
-import { rowNumber, rowString, type SqlRow } from "./rows";
+import type { Store } from "./store";
 import type { Driver, DriverFee, DriverInput, DriverListItem } from "./types";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -48,145 +46,57 @@ export function validateDriverInput(
   return { name, email, defaultFeeCents: input.defaultFeeCents, typeFees };
 }
 
-function mapDriver(row: SqlRow): Driver {
-  return {
-    id: rowNumber(row, "id"),
-    name: rowString(row, "name"),
-    email: rowString(row, "email"),
-    defaultFeeCents: rowNumber(row, "default_fee_cents"),
-    createdAt: rowString(row, "created_at"),
-    updatedAt: rowString(row, "updated_at"),
-  };
-}
-
-function replaceFees(db: DatabaseSync, driverId: number, typeFees: DriverInput["typeFees"]): void {
-  db.prepare("DELETE FROM driver_fee_terms WHERE driver_id = ?").run(driverId);
-  const insert = db.prepare(
-    `INSERT INTO driver_fee_terms (driver_id, claim_type_id, amount_cents)
-     VALUES (?, ?, ?)`,
-  );
-  for (const fee of typeFees) {
-    insert.run(driverId, fee.claimTypeId, fee.amountCents);
-  }
-}
-
-export function createDriver(db: DatabaseSync, input: DriverInput): number {
-  const known = new Set(listClaimTypes(db).map((type) => type.id));
+export async function createDriver(store: Store, input: DriverInput): Promise<number> {
+  const known = new Set((await listClaimTypes(store)).map((type) => type.id));
   const data = validateDriverInput(input, known);
-  return withTransaction(db, () => {
-    const now = nowIso();
-    const result = db
-      .prepare(
-        `INSERT INTO drivers (name, email, default_fee_cents, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(data.name, data.email, data.defaultFeeCents, now, now);
-    const id = insertId(result);
-    replaceFees(db, id, data.typeFees);
-    return id;
+  const now = nowIso();
+  const id = await store.insertDriver({
+    name: data.name,
+    email: data.email,
+    defaultFeeCents: data.defaultFeeCents,
+    createdAt: now,
+    updatedAt: now,
   });
+  await store.replaceDriverFees(id, data.typeFees);
+  return id;
 }
 
-export function updateDriver(db: DatabaseSync, id: number, input: DriverInput): void {
-  const existing = getDriver(db, id);
+export async function updateDriver(store: Store, id: number, input: DriverInput): Promise<void> {
+  const existing = await getDriver(store, id);
   if (!existing) throw new AppError("Driver not found.");
-  const known = new Set(listClaimTypes(db).map((type) => type.id));
+  const known = new Set((await listClaimTypes(store)).map((type) => type.id));
   const data = validateDriverInput(input, known);
-  withTransaction(db, () => {
-    db.prepare(
-      `UPDATE drivers
-       SET name = ?, email = ?, default_fee_cents = ?, updated_at = ?
-       WHERE id = ?`,
-    ).run(data.name, data.email, data.defaultFeeCents, nowIso(), id);
-    replaceFees(db, id, data.typeFees);
+  await store.updateDriverRow(id, {
+    name: data.name,
+    email: data.email,
+    defaultFeeCents: data.defaultFeeCents,
+    updatedAt: nowIso(),
   });
+  await store.replaceDriverFees(id, data.typeFees);
 }
 
-export function getDriver(db: DatabaseSync, id: number): Driver | undefined {
-  const row = db
-    .prepare(
-      `SELECT id, name, email, default_fee_cents, created_at, updated_at
-       FROM drivers
-       WHERE id = ?`,
-    )
-    .get(id) as SqlRow | undefined;
-  return row ? mapDriver(row) : undefined;
+export function getDriver(store: Store, id: number): Promise<Driver | undefined> {
+  return store.getDriver(id);
 }
 
-export function getDriverByEmail(db: DatabaseSync, email: string): Driver | undefined {
-  const row = db
-    .prepare(
-      `SELECT id, name, email, default_fee_cents, created_at, updated_at
-       FROM drivers
-       WHERE email = ?`,
-    )
-    .get(email) as SqlRow | undefined;
-  return row ? mapDriver(row) : undefined;
+export function getDriverByEmail(store: Store, email: string): Promise<Driver | undefined> {
+  return store.getDriverByEmail(email);
 }
 
-export function listDriverFees(db: DatabaseSync, driverId: number): DriverFee[] {
-  const rows = db
-    .prepare(
-      `SELECT f.claim_type_id, f.amount_cents, t.label AS claim_type_label
-       FROM driver_fee_terms f
-       JOIN claim_types t ON t.id = f.claim_type_id
-       WHERE f.driver_id = ?
-       ORDER BY t.id ASC`,
-    )
-    .all(driverId) as SqlRow[];
-  return rows.map((row) => ({
-    claimTypeId: rowNumber(row, "claim_type_id"),
-    claimTypeLabel: rowString(row, "claim_type_label"),
-    amountCents: rowNumber(row, "amount_cents"),
-  }));
+export function listDriverFees(store: Store, driverId: number): Promise<DriverFee[]> {
+  return store.listDriverFees(driverId);
 }
 
-export function listDrivers(db: DatabaseSync): DriverListItem[] {
-  const drivers = db
-    .prepare(
-      `SELECT id, name, email, default_fee_cents, created_at, updated_at
-       FROM drivers
-       ORDER BY name COLLATE NOCASE ASC, id ASC`,
-    )
-    .all() as SqlRow[];
-  const fees = db
-    .prepare(
-      `SELECT f.driver_id, f.claim_type_id, f.amount_cents, t.label AS claim_type_label
-       FROM driver_fee_terms f
-       JOIN claim_types t ON t.id = f.claim_type_id
-       ORDER BY t.id ASC`,
-    )
-    .all() as SqlRow[];
-  const byDriver = new Map<number, DriverFee[]>();
-  for (const row of fees) {
-    const driverId = rowNumber(row, "driver_id");
-    const list = byDriver.get(driverId) ?? [];
-    list.push({
-      claimTypeId: rowNumber(row, "claim_type_id"),
-      claimTypeLabel: rowString(row, "claim_type_label"),
-      amountCents: rowNumber(row, "amount_cents"),
-    });
-    byDriver.set(driverId, list);
-  }
-  return drivers.map((row) => {
-    const driver = mapDriver(row);
-    return { ...driver, typeFees: byDriver.get(driver.id) ?? [] };
-  });
+export function listDrivers(store: Store): Promise<DriverListItem[]> {
+  return store.listDrivers();
 }
 
 export function typeFeeCents(
-  db: DatabaseSync,
+  store: Store,
   driverId: number,
   claimTypeId: number,
-): number | null {
-  const row = db
-    .prepare(
-      `SELECT amount_cents
-       FROM driver_fee_terms
-       WHERE driver_id = ? AND claim_type_id = ?`,
-    )
-    .get(driverId, claimTypeId) as SqlRow | undefined;
-  return row ? rowNumber(row, "amount_cents") : null;
+): Promise<number | null> {
+  return store.typeFeeCents(driverId, claimTypeId);
 }
 
 export function contractFee(
@@ -198,4 +108,3 @@ export function contractFee(
   }
   return { amountCents: typeFee, basis: "claim_type" };
 }
-

@@ -2,17 +2,17 @@ import Link from "next/link";
 import { ClaimForm } from "../../../components/ClaimForm";
 import { PageHeader } from "../../../components/PageHeader";
 import { listClaimTypes } from "../../../lib/catalog";
-import { getDb } from "../../../lib/db";
+import { getStore } from "../../../lib/db";
 import { listDrivers } from "../../../lib/drivers";
 import { localDateTimeInputValue } from "../../../lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Record a claim" };
 
-export default function NewClaimPage() {
-  const db = getDb();
-  const drivers = listDrivers(db);
-  const claimTypes = listClaimTypes(db);
+export default async function NewClaimPage() {
+  const db = await getStore();
+  const drivers = await listDrivers(db);
+  const claimTypes = await listClaimTypes(db);
 
   return (
     <>

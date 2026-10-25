@@ -3,17 +3,17 @@ import { ClaimsTable } from "../components/ClaimsTable";
 import { EmailBadge } from "../components/StatusBadge";
 import { PageHeader } from "../components/PageHeader";
 import { dashboardStats, listClaims, listRecentEmails } from "../lib/claims";
-import { getDb } from "../lib/db";
+import { getStore } from "../lib/db";
 import { formatWhen } from "../lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Open claims" };
 
-export default function DashboardPage() {
-  const db = getDb();
-  const stats = dashboardStats(db);
-  const open = listClaims(db, { openOnly: true });
-  const emails = listRecentEmails(db, 6);
+export default async function DashboardPage() {
+  const db = await getStore();
+  const stats = await dashboardStats(db);
+  const open = await listClaims(db, { openOnly: true });
+  const emails = await listRecentEmails(db, 6);
 
   return (
     <>
