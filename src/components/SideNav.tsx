@@ -3,11 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
-  { href: "/", label: "Dashboard", exact: true },
-  { href: "/claims", label: "Claims", exact: false },
-  { href: "/drivers", label: "Drivers", exact: false },
-];
+const links = [{ href: "/", label: "Deliveries", exact: true }];
 
 export function SideNav() {
   const pathname = usePathname();
@@ -30,8 +26,8 @@ export function SideNav() {
           );
         })}
       </nav>
-      <Link href="/claims/new" className="button copper side-action">
-        Record a claim
+      <Link href="/inbound/new" className="button copper side-action">
+        New delivery
       </Link>
     </div>
   );

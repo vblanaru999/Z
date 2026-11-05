@@ -1,84 +1,76 @@
 import Link from "next/link";
-import { ClaimsTable } from "../components/ClaimsTable";
-import { EmailBadge } from "../components/StatusBadge";
+import { LoadsTable } from "../components/LoadsTable";
 import { PageHeader } from "../components/PageHeader";
-import { dashboardStats, listClaims, listRecentEmails } from "../lib/claims";
-import { getDb } from "../lib/db";
-import { formatWhen } from "../lib/format";
+import { firstParam } from "../lib/format";
+import { isLoadStatus, LOAD_STATUSES, LOAD_STATUS_LABELS, STAGE_MEANINGS, type LoadStatus } from "../lib/load-types";
+import { inboundDataDir, listLoads, loadStats } from "../lib/loads";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Open claims" };
+export const metadata = { title: "Deliveries" };
 
-export default function DashboardPage() {
-  const db = getDb();
-  const stats = dashboardStats(db);
-  const open = listClaims(db, { openOnly: true });
-  const emails = listRecentEmails(db, 6);
+const EMPTY: Record<LoadStatus | "all", string> = {
+  new: "No deliveries are New.",
+  confirmed: "No deliveries are Confirmed.",
+  arrived: "No deliveries have Arrived.",
+  received: "No deliveries are Received.",
+  altered: "No deliveries are Altered.",
+  all: "No inbound deliveries yet.",
+};
+
+function selectedStatus(raw: string | undefined): LoadStatus | "all" {
+  if (raw === "all") return "all";
+  if (raw && isLoadStatus(raw)) return raw;
+  return "all";
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string | string[] }>;
+}) {
+  const query = await searchParams;
+  const status = selectedStatus(firstParam(query.status));
+  const dir = inboundDataDir();
+  const stats = loadStats(dir);
+  const loads = listLoads(dir, status === "all" ? {} : { status });
+  const total = LOAD_STATUSES.reduce((sum, key) => sum + stats[key], 0);
 
   return (
     <>
       <PageHeader
-        kicker="Board"
-        title="Open claims"
-        lede="Procedure misses that are still open. Resolved and waived claims stay in the archive."
+        kicker="Inbound"
+        title="Inbound deliveries"
+        lede="A delivery moves through New, Confirmed, Arrived, Received, and Altered. The list shows the current stage."
         action={
-          <Link href="/claims/new" className="button primary">
-            Record a claim
+          <Link href="/inbound/new" className="button primary">
+            New delivery
           </Link>
         }
       />
-      <section className="stats" aria-label="Claim counts">
-        <div className="stat">
-          <div className="stat-value">{stats.open}</div>
-          <div className="stat-label">Open</div>
-          <div className="stat-hint">Recorded, warned, or fee applied</div>
-        </div>
-        <Link className="stat" href="/claims?status=recorded">
-          <div className="stat-value">{stats.recorded}</div>
-          <div className="stat-label">Recorded</div>
-          <div className="stat-hint">No warning yet</div>
-        </Link>
-        <Link className="stat" href="/claims?status=warning_sent">
-          <div className="stat-value">{stats.warningSent}</div>
-          <div className="stat-label">Warning sent</div>
-          <div className="stat-hint">Waiting on a fee decision</div>
-        </Link>
-        <Link className="stat" href="/claims?status=fee_applied">
-          <div className="stat-value">{stats.feeApplied}</div>
-          <div className="stat-label">Fee applied</div>
-          <div className="stat-hint">Not resolved yet</div>
+      <section className="stats stage-stats" aria-label="Delivery counts">
+        {LOAD_STATUSES.map((key) => (
+          <Link
+            key={key}
+            className={status === key ? "stat current" : "stat"}
+            href={`/?status=${key}`}
+          >
+            <div className="stat-value">{stats[key]}</div>
+            <div className="stat-label">{LOAD_STATUS_LABELS[key]}</div>
+            <div className="stat-hint">{STAGE_MEANINGS[key]}</div>
+          </Link>
+        ))}
+        <Link className={status === "all" ? "stat current" : "stat"} href="/?status=all">
+          <div className="stat-value">{total}</div>
+          <div className="stat-label">All</div>
+          <div className="stat-hint">Every delivery</div>
         </Link>
       </section>
       <section className="panel">
         <div className="section-head">
-          <h2>Still open</h2>
-          <Link href="/claims">All claims</Link>
+          <h2>{status === "all" ? "All deliveries" : LOAD_STATUS_LABELS[status]}</h2>
         </div>
-        <ClaimsTable
-          claims={open}
-          empty="No open claims. Record one when a driver misses a step."
-        />
+        <LoadsTable loads={loads} empty={EMPTY[status]} />
       </section>
-      {emails.length > 0 ? (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <div className="section-head">
-            <h2>Recent emails</h2>
-          </div>
-          <ul className="timeline">
-            {emails.map((email) => (
-              <li key={email.id}>
-                <time dateTime={email.createdAt}>{formatWhen(email.createdAt)}</time>
-                <div>
-                  <EmailBadge status={email.status} />{" "}
-                  <Link href={`/claims/${email.claimId}`}>{email.driverName}</Link>
-                  <div>{email.subject}</div>
-                  {email.error ? <div className="muted">{email.error}</div> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </>
   );
 }

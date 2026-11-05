@@ -1,4 +1,10 @@
 import {
+  EXCEPTION_LABELS,
+  LOAD_STATUS_LABELS,
+  type ExceptionKind,
+  type LoadStatus,
+} from "../lib/load-types";
+import {
   SOURCE_LABELS,
   STATUS_LABELS,
   type ClaimSource,
@@ -22,4 +28,12 @@ export function SourceBadge({ source }: { source: ClaimSource }) {
 
 export function EmailBadge({ status }: { status: EmailStatus }) {
   return <span className={`badge badge-${status}`}>{EMAIL_LABELS[status]}</span>;
+}
+
+export function LoadStatusBadge({ status }: { status: LoadStatus }) {
+  return <span className={`badge badge-${status}`}>{LOAD_STATUS_LABELS[status]}</span>;
+}
+
+export function ExceptionBadge({ kind }: { kind: ExceptionKind }) {
+  return <span className={`badge badge-${kind}`}>{EXCEPTION_LABELS[kind]}</span>;
 }

@@ -1,12 +1,10 @@
-# Claim
+# Inbound
 
-Claim is a small operations app for delivery procedure misses. A person records what a driver did incorrectly, sends a formal warning email, and can later apply the fee already stored on that driver's contract.
+Inbound records one delivery as it moves through New, Confirmed, Arrived, Received, and Altered. This screen is not the claim tracker.
 
-Data entry is manual. Each claim has a `source`: `manual` today, with `xcelerator` reserved for a later import. This app does not talk to Xcelerator.
+## Run it locally
 
-## Run it
-
-Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite` module).
+Requires Node.js 22.13 or newer. No email setup and no seed data.
 
 ```bash
 npm install
@@ -14,13 +12,7 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The database is created at `data/claim.db` on first use, with the three claim types already loaded. There is no login.
-
-Optional sample drivers and one recorded claim:
-
-```bash
-npm run db:seed
-```
+Open [http://localhost:3000](http://localhost:3000). That page is the delivery list. Each delivery is one JSON file in `data/inbound/`, named by id (`data/inbound/1.json`, `data/inbound/2.json`). The folder is created the first time you save a delivery, and it is gitignored, so the files stay on this machine. Set `INBOUND_DATA_DIR` if they should live somewhere else. There is no login.
 
 Production build:
 
@@ -29,7 +21,29 @@ npm run build
 npm start
 ```
 
-Set `DATABASE_PATH` if the SQLite file should live somewhere other than `data/claim.db`.
+The claim tracker, if you open it, still uses SQLite. Set `DATABASE_PATH` if that file should live somewhere else. Inbound deliveries do not use it.
+
+## Inbound deliveries
+
+One delivery is one trailer, stored in its own file. It moves through these stages in order. The list and the delivery page both show the current stage.
+
+1. **New.** The delivery is on file and has not been confirmed yet. Saving the trailer record (arrival time, carrier, trailer number, seal, BOL/PRO, PO or ASN, dock door, driver, expected pallet and piece counts, notes) starts it here.
+2. **Confirmed.** The warehouse confirmed this delivery is expected.
+3. **Arrived.** The trailer is at the dock and has not been received.
+4. **Received.** The freight was unloaded, counted, sorted, and put away. This records who unloaded it, start and finish times, received counts against the expected counts, the sort outcome, putaway locations, and any damage, shortage, or overage.
+5. **Altered.** The delivery was changed after it was received. A note says what changed.
+
+A delivery cannot skip a stage.
+
+## Claim tracker
+
+The same repository still has the older claim tracker for delivery procedure misses. It is separate from inbound. Open [http://localhost:3000/open](http://localhost:3000/open) for that board. Data entry there is manual. Each claim has a `source`: `manual` today, with `xcelerator` reserved for a later import. This app does not talk to Xcelerator.
+
+Optional sample drivers and one recorded claim:
+
+```bash
+npm run db:seed
+```
 
 ## What you can do
 
