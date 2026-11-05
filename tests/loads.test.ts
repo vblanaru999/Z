@@ -1,33 +1,40 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { beforeEach, describe, expect, it } from "vitest";
-import { openDatabase } from "../src/lib/db";
+import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "../src/lib/errors";
 import {
   describeQuantityGap,
   loadProgress,
+  nextStage,
   type CompleteUnloadInput,
   type ReceivingInput,
   type StartUnloadInput,
 } from "../src/lib/load-types";
 import {
+  alterLoad,
+  arriveLoad,
   completeFromForm,
-  completeUnload,
+  confirmLoad,
   createLoad,
   getLoad,
   listLoads,
   loadStats,
+  receiveLoad,
   receivingFromForm,
   startFromForm,
-  startUnload,
 } from "../src/lib/loads";
 
-let db: DatabaseSync;
+const dirs: string[] = [];
 
-beforeEach(() => {
-  db = openDatabase(":memory:");
+function tempDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inbound-"));
+  dirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
 const receiving: ReceivingInput = {
@@ -61,17 +68,22 @@ function finish(overrides: Partial<CompleteUnloadInput> = {}): CompleteUnloadInp
   };
 }
 
-function receive(overrides: Partial<ReceivingInput> = {}): number {
-  return createLoad(db, { ...receiving, ...overrides });
+function receive(dir: string, overrides: Partial<ReceivingInput> = {}): number {
+  return createLoad(dir, { ...receiving, ...overrides });
 }
 
-describe("receiving", () => {
-  it("saves a waiting load and does not start unloading", () => {
-    const id = receive();
-    const load = getLoad(db, id);
+function fileFor(dir: string, id: number): string {
+  return path.join(dir, `${id}.json`);
+}
+
+describe("new delivery", () => {
+  it("saves a New delivery and does not confirm it", () => {
+    const dir = tempDir();
+    const id = receive(dir);
+    const load = getLoad(dir, id);
     expect(load).toMatchObject({
       id,
-      status: "waiting",
+      status: "new",
       carrier: "Northline",
       trailerNumber: "TRL-4412",
       sealNumber: "SL-90821",
@@ -84,31 +96,31 @@ describe("receiving", () => {
       receivingNotes: "Seal intact at the door.",
       unloadStartedAt: null,
       unloadedBy: null,
-      unloadFinishedAt: null,
-      receivedPallets: null,
-      receivedPieces: null,
-      sortOutcome: null,
-      putawayLocations: null,
+      alterationNote: null,
       exceptions: [],
     });
-    expect(loadStats(db)).toEqual({ waiting: 1, unloading: 0, done: 0 });
-    expect(listLoads(db, { status: "waiting" }).map((load) => load.id)).toEqual([id]);
-    expect(loadProgress("waiting").map((step) => [step.key, step.state])).toEqual([
-      ["receiving", "complete"],
-      ["waiting", "current"],
-      ["unloading", "upcoming"],
-      ["done", "upcoming"],
+    expect(loadStats(dir)).toEqual({ new: 1, confirmed: 0, arrived: 0, received: 0, altered: 0 });
+    expect(listLoads(dir, { status: "new" }).map((load) => load.id)).toEqual([id]);
+    expect(loadProgress("new").map((step) => [step.key, step.state])).toEqual([
+      ["new", "current"],
+      ["confirmed", "upcoming"],
+      ["arrived", "upcoming"],
+      ["received", "upcoming"],
+      ["altered", "upcoming"],
     ]);
+    expect(nextStage("new")).toBe("confirmed");
+    expect(nextStage("altered")).toBeNull();
   });
 
-  it("rejects a receiving record that is missing the practical fields", () => {
-    expect(() => receive({ carrier: "  " })).toThrow(AppError);
-    expect(() => receive({ references: "\n" })).toThrow(/PO or ASN/);
-    expect(() => receive({ expectedPallets: -1 })).toThrow(/expected pallets/);
-    expect(() => receive({ expectedPieces: 1.5 })).toThrow(/expected pieces/);
+  it("rejects a record that is missing the practical fields", () => {
+    const dir = tempDir();
+    expect(() => receive(dir, { carrier: "  " })).toThrow(AppError);
+    expect(() => receive(dir, { references: "\n" })).toThrow(/PO or ASN/);
+    expect(() => receive(dir, { expectedPallets: -1 })).toThrow(/expected pallets/);
+    expect(() => receive(dir, { expectedPieces: 1.5 })).toThrow(/expected pieces/);
   });
 
-  it("reads the receiving form", () => {
+  it("reads the delivery form", () => {
     const form = new FormData();
     form.set("arrivedAt", "2026-11-05T08:30");
     form.set("carrier", " Northline ");
@@ -131,26 +143,29 @@ describe("receiving", () => {
   });
 });
 
-describe("unloading", () => {
-  it("starts from the waiting load and then finishes that same load", () => {
-    const id = receive();
-    expect(() => completeUnload(db, id, finish())).toThrow(/Start unloading/);
+describe("stages", () => {
+  it("moves New, Confirmed, Arrived, Received, then Altered", () => {
+    const dir = tempDir();
+    const id = receive(dir);
+    expect(() => arriveLoad(dir, id)).toThrow(/Confirmed/);
+    expect(() => receiveLoad(dir, id, start, finish())).toThrow(/Arrived/);
+    expect(() => alterLoad(dir, id, "Count corrected.")).toThrow(/Received/);
 
-    startUnload(db, id, start);
-    const unloading = getLoad(db, id);
-    expect(unloading).toMatchObject({
-      status: "unloading",
-      unloadStartedAt: start.startedAt,
-      unloadedBy: "Dana Ruiz",
-      receivedPallets: null,
-    });
-    expect(loadProgress("unloading").find((step) => step.key === "unloading")?.state).toBe(
+    confirmLoad(dir, id);
+    expect(getLoad(dir, id)?.status).toBe("confirmed");
+    expect(loadProgress("confirmed").find((step) => step.key === "confirmed")?.state).toBe(
       "current",
     );
+    expect(() => confirmLoad(dir, id)).toThrow(/New/);
 
-    completeUnload(
-      db,
+    arriveLoad(dir, id);
+    expect(getLoad(dir, id)?.status).toBe("arrived");
+    expect(() => confirmLoad(dir, id)).toThrow(/New/);
+
+    receiveLoad(
+      dir,
       id,
+      start,
       finish({
         receivedPallets: 11,
         receivedPieces: 250,
@@ -164,72 +179,99 @@ describe("unloading", () => {
       }),
     );
 
-    const done = getLoad(db, id);
-    expect(done?.status).toBe("done");
-    expect(done?.receivedPallets).toBe(11);
-    expect(done?.receivedPieces).toBe(250);
-    expect(done?.sortOutcome).toBe("partial");
-    expect(done?.putawayLocations).toBe("A-12-03\nQC cage");
-    expect(done?.exceptions.map((exception) => exception.kind)).toEqual([
+    const received = getLoad(dir, id);
+    expect(received?.status).toBe("received");
+    expect(received?.receivedPallets).toBe(11);
+    expect(received?.receivedPieces).toBe(250);
+    expect(received?.sortOutcome).toBe("partial");
+    expect(received?.putawayLocations).toBe("A-12-03\nQC cage");
+    expect(received?.unloadedBy).toBe("Dana Ruiz");
+    expect(received?.exceptions.map((exception) => exception.kind)).toEqual([
       "shortage",
       "overage",
       "damage",
     ]);
     expect(describeQuantityGap(12, 240, 11, 250)).toBe("1 pallet short and 10 pieces over.");
-    expect(listLoads(db, { status: "waiting" })).toEqual([]);
-    expect(listLoads(db, { status: "done" }).map((load) => load.id)).toEqual([id]);
-    expect(loadStats(db).done).toBe(1);
-    expect(() => startUnload(db, id, start)).toThrow(/already done/);
-    expect(() => completeUnload(db, id, finish())).toThrow(/already done/);
+    expect(listLoads(dir, { status: "arrived" })).toEqual([]);
+    expect(listLoads(dir, { status: "received" }).map((load) => load.id)).toEqual([id]);
+    expect(() => receiveLoad(dir, id, start, finish())).toThrow(/Arrived/);
+
+    expect(() => alterLoad(dir, id, "   ")).toThrow(/what changed/i);
+    alterLoad(dir, id, "Putaway moved from A-12-03 to A-12-04.");
+    const altered = getLoad(dir, id);
+    expect(altered?.status).toBe("altered");
+    expect(altered?.alterationNote).toBe("Putaway moved from A-12-03 to A-12-04.");
+    expect(loadStats(dir).altered).toBe(1);
+    expect(loadProgress("altered").at(-1)?.state).toBe("current");
+    expect(() => alterLoad(dir, id, "Again.")).toThrow(/Received/);
   });
 
   it("requires a shortage or overage only when the counts disagree", () => {
-    const matched = receive();
-    startUnload(db, matched, start);
-    completeUnload(db, matched, finish());
-    expect(getLoad(db, matched)?.exceptions).toEqual([]);
+    const dir = tempDir();
+    const matched = receive(dir);
+    confirmLoad(dir, matched);
+    arriveLoad(dir, matched);
+    receiveLoad(dir, matched, start, finish());
+    expect(getLoad(dir, matched)?.exceptions).toEqual([]);
 
-    const short = receive({ trailerNumber: "TRL-2" });
-    startUnload(db, short, start);
-    expect(() => completeUnload(db, short, finish({ receivedPieces: 239 }))).toThrow(/shortage/);
-    completeUnload(db, short, finish({
-      receivedPieces: 239,
-      exceptions: [{ kind: "shortage", quantity: null, notes: "One piece short." }],
-    }));
+    const short = receive(dir, { trailerNumber: "TRL-2" });
+    confirmLoad(dir, short);
+    arriveLoad(dir, short);
+    expect(() => receiveLoad(dir, short, start, finish({ receivedPieces: 239 }))).toThrow(
+      /shortage/,
+    );
+    receiveLoad(
+      dir,
+      short,
+      start,
+      finish({
+        receivedPieces: 239,
+        exceptions: [{ kind: "shortage", quantity: null, notes: "One piece short." }],
+      }),
+    );
 
-    const over = receive({ trailerNumber: "TRL-3" });
-    startUnload(db, over, start);
+    const over = receive(dir, { trailerNumber: "TRL-3" });
+    confirmLoad(dir, over);
+    arriveLoad(dir, over);
     expect(() =>
-      completeUnload(db, over, finish({
-        receivedPallets: 13,
-        exceptions: [{ kind: "damage", quantity: 1, notes: "Torn wrap." }],
-      })),
+      receiveLoad(
+        dir,
+        over,
+        start,
+        finish({
+          receivedPallets: 13,
+          exceptions: [{ kind: "damage", quantity: 1, notes: "Torn wrap." }],
+        }),
+      ),
     ).toThrow(/overage/);
   });
 
   it("rejects an unload that starts before arrival or finishes before it started", () => {
-    const id = receive();
+    const dir = tempDir();
+    const id = receive(dir);
+    confirmLoad(dir, id);
+    arriveLoad(dir, id);
     expect(() =>
-      startUnload(db, id, { ...start, startedAt: "2026-11-05T12:59:00.000Z" }),
+      receiveLoad(dir, id, { ...start, startedAt: "2026-11-05T12:59:00.000Z" }, finish()),
     ).toThrow(/before the trailer arrived/);
-    startUnload(db, id, start);
     expect(() =>
-      completeUnload(db, id, finish({ finishedAt: "2026-11-05T16:00:00.000Z" })),
+      receiveLoad(dir, id, start, finish({ finishedAt: "2026-11-05T16:00:00.000Z" })),
     ).toThrow(/before it started/);
-    expect(getLoad(db, id)?.status).toBe("unloading");
+    expect(getLoad(dir, id)?.status).toBe("arrived");
   });
 
-  it("keeps the waiting queue in arrival order", () => {
-    const later = receive({ arrivedAt: "2026-11-05T18:00:00.000Z", trailerNumber: "TRL-L" });
-    const earlier = receive({ arrivedAt: "2026-11-05T09:00:00.000Z", trailerNumber: "TRL-E" });
-    expect(listLoads(db, { status: "waiting" }).map((load) => load.id)).toEqual([earlier, later]);
-    startUnload(db, earlier, { ...start, startedAt: "2026-11-05T19:00:00.000Z" });
-    expect(listLoads(db, { status: "unloading" }).map((load) => load.trailerNumber)).toEqual([
+  it("keeps New deliveries in arrival order", () => {
+    const dir = tempDir();
+    const later = receive(dir, { arrivedAt: "2026-11-05T18:00:00.000Z", trailerNumber: "TRL-L" });
+    const earlier = receive(dir, { arrivedAt: "2026-11-05T09:00:00.000Z", trailerNumber: "TRL-E" });
+    expect(listLoads(dir, { status: "new" }).map((load) => load.id)).toEqual([earlier, later]);
+    confirmLoad(dir, earlier);
+    expect(listLoads(dir, { status: "confirmed" }).map((load) => load.trailerNumber)).toEqual([
       "TRL-E",
     ]);
   });
 
-  it("reads the unload forms", () => {
+  it("reads the receipt form", () => {
     const startForm = new FormData();
     startForm.set("startedAt", "2026-11-05T11:00");
     startForm.set("unloadedBy", " Dana Ruiz ");
@@ -247,41 +289,43 @@ describe("unloading", () => {
     form.set("shortageQuantity", "");
     const input = completeFromForm(form);
     expect(input.sortOutcome).toBe("held");
-    expect(input.exceptions).toEqual([
-      { kind: "damage", quantity: 2, notes: "Crushed corner" },
-    ]);
+    expect(input.exceptions).toEqual([{ kind: "damage", quantity: 2, notes: "Crushed corner" }]);
     form.set("sortOutcome", "lost");
     expect(() => completeFromForm(form)).toThrow(/sorted/);
   });
 });
 
-describe("persistence", () => {
-  it("keeps a finished load after the database is closed and reopened", () => {
-    const file = path.join(os.tmpdir(), `inbound-${process.pid}-${Date.now()}.db`);
-    const first = openDatabase(file);
-    try {
-      const id = createLoad(first, receiving);
-      startUnload(first, id, start);
-      completeUnload(first, id, finish({
-        exceptions: [{ kind: "damage", quantity: null, notes: "Wet carton." }],
-      }));
-      first.close();
+describe("local files", () => {
+  it("writes each delivery to its own JSON file and reads that file back", () => {
+    const dir = tempDir();
+    const id = createLoad(dir, receiving);
+    const file = fileFor(dir, id);
+    expect(fs.existsSync(file)).toBe(true);
+    expect(path.basename(file)).toBe(`${id}.json`);
 
-      const second = openDatabase(file);
-      try {
-        const load = getLoad(second, id);
-        expect(load?.status).toBe("done");
-        expect(load?.trailerNumber).toBe("TRL-4412");
-        expect(load?.putawayLocations).toBe("A-12-03\nB-04-01");
-        expect(load?.exceptions).toMatchObject([{ kind: "damage", notes: "Wet carton." }]);
-        expect(loadStats(second)).toEqual({ waiting: 0, unloading: 0, done: 1 });
-      } finally {
-        second.close();
-      }
-    } finally {
-      for (const suffix of ["", "-wal", "-shm"]) {
-        fs.rmSync(file + suffix, { force: true });
-      }
-    }
+    const onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as { status: string; trailerNumber: string };
+    expect(onDisk).toMatchObject({ status: "new", trailerNumber: "TRL-4412" });
+
+    confirmLoad(dir, id);
+    arriveLoad(dir, id);
+    receiveLoad(dir, id, start, finish({
+      exceptions: [{ kind: "damage", quantity: null, notes: "Wet carton." }],
+    }));
+    alterLoad(dir, id, "Carton dried and restaged.");
+
+    const reread = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      status: string;
+      alterationNote: string;
+      exceptions: { kind: string; notes: string }[];
+    };
+    expect(reread.status).toBe("altered");
+    expect(reread.alterationNote).toBe("Carton dried and restaged.");
+    expect(reread.exceptions).toMatchObject([{ kind: "damage", notes: "Wet carton." }]);
+
+    const load = getLoad(dir, id);
+    expect(load?.status).toBe("altered");
+    expect(load?.putawayLocations).toBe("A-12-03\nB-04-01");
+    expect(loadStats(dir)).toEqual({ new: 0, confirmed: 0, arrived: 0, received: 0, altered: 1 });
+    expect(fs.readdirSync(dir).filter((name) => name.endsWith(".json"))).toEqual([`${id}.json`]);
   });
 });

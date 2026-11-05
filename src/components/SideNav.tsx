@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [{ href: "/", label: "Queue", exact: true }];
+const links = [{ href: "/", label: "Deliveries", exact: true }];
 
 export function SideNav() {
   const pathname = usePathname();
@@ -27,7 +27,7 @@ export function SideNav() {
         })}
       </nav>
       <Link href="/inbound/new" className="button copper side-action">
-        Receive a trailer
+        New delivery
       </Link>
     </div>
   );

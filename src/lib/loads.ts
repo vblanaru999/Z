@@ -1,5 +1,5 @@
-import type { DatabaseSync } from "node:sqlite";
-import { changed, insertId, withTransaction } from "./db";
+import fs from "node:fs";
+import path from "node:path";
 import { AppError } from "./errors";
 import { nowIso } from "./format";
 import {
@@ -18,14 +18,14 @@ import {
   type LoadStats,
   type LoadStatus,
   type ReceivingInput,
+  type SortOutcome,
   type StartUnloadInput,
 } from "./load-types";
-import { rowNumber, rowNumberOrNull, rowString, rowStringOrNull, type SqlRow } from "./rows";
 
 /**
- * Inbound lifecycle for one trailer:
- * receiving save → waiting → start unload → unloading → finish unload → done.
- * Stage 2 cannot be completed while the load is still waiting.
+ * Inbound deliveries live in one JSON file per trailer under data/inbound/.
+ * A delivery moves New → Confirmed → Arrived → Received → Altered.
+ * Each move writes that file. A later read loads it back from disk.
  */
 
 const COUNT_LIMIT = 1_000_000;
@@ -236,240 +236,314 @@ export function loadIdFromForm(formData: FormData): number {
   return id;
 }
 
-function mapException(row: SqlRow): LoadException {
-  const kind = rowString(row, "kind");
-  if (!isExceptionKind(kind)) throw new Error("Unexpected exception kind.");
+/** One JSON file per trailer: data/inbound/1.json, data/inbound/2.json, and so on. */
+export function inboundDataDir(): string {
+  const configured = process.env.INBOUND_DATA_DIR?.trim();
+  if (configured) return path.resolve(configured);
+  return path.join(process.cwd(), "data", "inbound");
+}
+
+function loadFile(dir: string, id: number): string {
+  return path.join(dir, `${id}.json`);
+}
+
+function ensureDir(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+function readText(file: string): string {
+  return fs.readFileSync(file, "utf8");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function expectString(record: Record<string, unknown>, key: string, file: string): string {
+  const value = record[key];
+  if (typeof value !== "string") throw new Error(`Load file ${file} is missing ${key}.`);
+  return value;
+}
+
+function expectStringOrNull(record: Record<string, unknown>, key: string, file: string): string | null {
+  const value = record[key];
+  if (value === null) return null;
+  if (typeof value === "string") return value;
+  throw new Error(`Load file ${file} is missing ${key}.`);
+}
+
+function expectNumber(record: Record<string, unknown>, key: string, file: string): number {
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error(`Load file ${file} is missing ${key}.`);
+  }
+  return value;
+}
+
+function expectNumberOrNull(record: Record<string, unknown>, key: string, file: string): number | null {
+  const value = record[key];
+  if (value === null) return null;
+  return expectNumber(record, key, file);
+}
+
+function parseException(value: unknown, file: string): LoadException {
+  if (!isRecord(value)) throw new Error(`Load file ${file} has a bad exception.`);
+  const kind = expectString(value, "kind", file);
+  if (!isExceptionKind(kind)) throw new Error(`Load file ${file} has an unexpected exception.`);
   return {
-    id: rowNumber(row, "id"),
+    id: expectNumber(value, "id", file),
     kind,
-    quantity: rowNumberOrNull(row, "quantity"),
-    notes: rowString(row, "notes"),
-    createdAt: rowString(row, "created_at"),
+    quantity: expectNumberOrNull(value, "quantity", file),
+    notes: expectString(value, "notes", file),
+    createdAt: expectString(value, "createdAt", file),
   };
 }
 
-function listExceptions(db: DatabaseSync, loadId: number): LoadException[] {
-  const rows = db
-    .prepare(
-      `SELECT id, kind, quantity, notes, created_at
-       FROM inbound_exceptions
-       WHERE load_id = ?
-       ORDER BY id ASC`,
-    )
-    .all(loadId) as SqlRow[];
-  return rows.map(mapException);
-}
-
-function mapListItem(row: SqlRow): LoadListItem {
-  const status = rowString(row, "status");
-  if (!isLoadStatus(status)) throw new Error("Load row has an unexpected status.");
-  return {
-    id: rowNumber(row, "id"),
-    status,
-    arrivedAt: rowString(row, "arrived_at"),
-    carrier: rowString(row, "carrier"),
-    trailerNumber: rowString(row, "trailer_number"),
-    bolPro: rowString(row, "bol_pro"),
-    dockDoor: rowString(row, "dock_door"),
-    expectedPallets: rowNumber(row, "expected_pallets"),
-    expectedPieces: rowNumber(row, "expected_pieces"),
-  };
-}
-
-function mapLoad(row: SqlRow, exceptions: LoadException[]): InboundLoad {
-  const base = mapListItem(row);
-  const sortRaw = rowStringOrNull(row, "sort_outcome");
-  const sortOutcome = sortRaw === null ? null : sortRaw;
-  if (sortOutcome !== null && !isSortOutcome(sortOutcome)) {
-    throw new Error("Load row has an unexpected sort outcome.");
+function parseLoad(value: unknown, file: string): InboundLoad {
+  if (!isRecord(value)) throw new Error(`Load file ${file} is not a load record.`);
+  const status = expectString(value, "status", file);
+  if (!isLoadStatus(status)) throw new Error(`Load file ${file} has an unexpected status.`);
+  const sortRaw = expectStringOrNull(value, "sortOutcome", file);
+  let sortOutcome: SortOutcome | null = null;
+  if (sortRaw !== null) {
+    if (!isSortOutcome(sortRaw)) throw new Error(`Load file ${file} has an unexpected sort outcome.`);
+    sortOutcome = sortRaw;
   }
+  const exceptionsRaw = value.exceptions;
+  if (!Array.isArray(exceptionsRaw)) throw new Error(`Load file ${file} is missing exceptions.`);
   const load: InboundLoad = {
-    ...base,
-    sealNumber: rowString(row, "seal_number"),
-    references: rowString(row, "reference_numbers"),
-    driverName: rowString(row, "driver_name"),
-    receivingNotes: rowString(row, "receiving_notes"),
-    unloadStartedAt: rowStringOrNull(row, "unload_started_at"),
-    unloadedBy: rowStringOrNull(row, "unloaded_by"),
-    unloadFinishedAt: rowStringOrNull(row, "unload_finished_at"),
-    receivedPallets: rowNumberOrNull(row, "received_pallets"),
-    receivedPieces: rowNumberOrNull(row, "received_pieces"),
+    id: expectNumber(value, "id", file),
+    status,
+    arrivedAt: expectString(value, "arrivedAt", file),
+    carrier: expectString(value, "carrier", file),
+    trailerNumber: expectString(value, "trailerNumber", file),
+    bolPro: expectString(value, "bolPro", file),
+    dockDoor: expectString(value, "dockDoor", file),
+    expectedPallets: expectNumber(value, "expectedPallets", file),
+    expectedPieces: expectNumber(value, "expectedPieces", file),
+    sealNumber: expectString(value, "sealNumber", file),
+    references: expectString(value, "references", file),
+    driverName: expectString(value, "driverName", file),
+    receivingNotes: expectString(value, "receivingNotes", file),
+    unloadStartedAt: expectStringOrNull(value, "unloadStartedAt", file),
+    unloadedBy: expectStringOrNull(value, "unloadedBy", file),
+    unloadFinishedAt: expectStringOrNull(value, "unloadFinishedAt", file),
+    receivedPallets: expectNumberOrNull(value, "receivedPallets", file),
+    receivedPieces: expectNumberOrNull(value, "receivedPieces", file),
     sortOutcome,
-    putawayLocations: rowStringOrNull(row, "putaway_locations"),
-    createdAt: rowString(row, "created_at"),
-    updatedAt: rowString(row, "updated_at"),
-    exceptions,
+    putawayLocations: expectStringOrNull(value, "putawayLocations", file),
+    createdAt: expectString(value, "createdAt", file),
+    updatedAt: expectString(value, "updatedAt", file),
+    alterationNote: expectStringOrNull(value, "alterationNote", file),
+    exceptions: exceptionsRaw.map((exception) => parseException(exception, file)),
   };
-  if (load.status !== "waiting" && (!load.unloadStartedAt || !load.unloadedBy)) {
-    throw new Error("Unloading row is missing a start.");
-  }
+  const received = load.status === "received" || load.status === "altered";
   if (
-    load.status === "done" &&
-    (load.unloadFinishedAt === null ||
+    received &&
+    (load.unloadStartedAt === null ||
+      load.unloadedBy === null ||
+      load.unloadFinishedAt === null ||
       load.receivedPallets === null ||
       load.receivedPieces === null ||
       load.sortOutcome === null ||
       load.putawayLocations === null)
   ) {
-    throw new Error("Finished load is missing unload details.");
+    throw new Error(`Load file ${file} is missing receipt details.`);
+  }
+  if (load.status === "altered" && !load.alterationNote) {
+    throw new Error(`Load file ${file} is missing the alteration.`);
   }
   return load;
 }
 
-const LOAD_COLUMNS = `
-  id, status, arrived_at, carrier, trailer_number, seal_number, bol_pro,
-  reference_numbers, dock_door, driver_name, expected_pallets, expected_pieces,
-  receiving_notes, unload_started_at, unloaded_by, unload_finished_at,
-  received_pallets, received_pieces, sort_outcome, putaway_locations,
-  created_at, updated_at
-`;
+function readLoadFile(dir: string, id: number): InboundLoad | null {
+  const file = loadFile(dir, id);
+  if (!fs.existsSync(file)) return null;
+  return parseLoad(JSON.parse(readText(file)) as unknown, file);
+}
 
-export function createLoad(db: DatabaseSync, input: ReceivingInput): number {
-  const data = normalizeReceiving(input);
-  return withTransaction(db, () => {
-    const now = nowIso();
-    const result = db
-      .prepare(
-        `INSERT INTO inbound_loads (
-           status, arrived_at, carrier, trailer_number, seal_number, bol_pro,
-           reference_numbers, dock_door, driver_name, expected_pallets, expected_pieces,
-           receiving_notes, created_at, updated_at
-         ) VALUES (
-           'waiting', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-         )`,
-      )
-      .run(
-        data.arrivedAt,
-        data.carrier,
-        data.trailerNumber,
-        data.sealNumber,
-        data.bolPro,
-        data.references,
-        data.dockDoor,
-        data.driverName,
-        data.expectedPallets,
-        data.expectedPieces,
-        data.notes,
-        now,
-        now,
-      );
-    return insertId(result);
+function writeLoadFile(dir: string, load: InboundLoad, exclusive = false): void {
+  ensureDir(dir);
+  const file = loadFile(dir, load.id);
+  const body = `${JSON.stringify(load, null, 2)}\n`;
+  if (exclusive) {
+    fs.writeFileSync(file, body, { encoding: "utf8", flag: "wx" });
+    return;
+  }
+  const temp = path.join(dir, `.${load.id}.${process.pid}.tmp`);
+  fs.writeFileSync(temp, body, "utf8");
+  fs.renameSync(temp, file);
+}
+
+function listLoadFiles(dir: string): InboundLoad[] {
+  if (!fs.existsSync(dir)) return [];
+  const names = fs.readdirSync(dir).filter((name) => /^\d+\.json$/.test(name));
+  return names.map((name) => {
+    const file = path.join(dir, name);
+    return parseLoad(JSON.parse(readText(file)) as unknown, file);
   });
 }
 
-export function getLoad(db: DatabaseSync, id: number): InboundLoad | null {
-  const row = db.prepare(`SELECT ${LOAD_COLUMNS} FROM inbound_loads WHERE id = ?`).get(id) as
-    | SqlRow
-    | undefined;
-  if (!row) return null;
-  return mapLoad(row, listExceptions(db, id));
+function toListItem(load: InboundLoad): LoadListItem {
+  return {
+    id: load.id,
+    status: load.status,
+    arrivedAt: load.arrivedAt,
+    carrier: load.carrier,
+    trailerNumber: load.trailerNumber,
+    bolPro: load.bolPro,
+    dockDoor: load.dockDoor,
+    expectedPallets: load.expectedPallets,
+    expectedPieces: load.expectedPieces,
+  };
 }
 
-export function listLoads(db: DatabaseSync, filter: LoadListFilter = {}): LoadListItem[] {
-  const params: string[] = [];
-  let where = "";
-  if (filter.status) {
-    where = "WHERE status = ?";
-    params.push(filter.status);
-  }
-  const oldestFirst = filter.status === "waiting" || filter.status === "unloading";
-  const order = oldestFirst ? "arrived_at ASC, id ASC" : "arrived_at DESC, id DESC";
-  const rows = db
-    .prepare(`SELECT ${LOAD_COLUMNS} FROM inbound_loads ${where} ORDER BY ${order}`)
-    .all(...params) as SqlRow[];
-  return rows.map(mapListItem);
+function nextLoadId(dir: string): number {
+  const loads = listLoadFiles(dir);
+  return loads.reduce((max, load) => Math.max(max, load.id), 0) + 1;
 }
 
-export function loadStats(db: DatabaseSync): LoadStats {
-  const rows = db
-    .prepare(`SELECT status, COUNT(*) AS n FROM inbound_loads GROUP BY status`)
-    .all() as SqlRow[];
-  const stats: LoadStats = { waiting: 0, unloading: 0, done: 0 };
-  for (const row of rows) {
-    const status = rowString(row, "status");
-    if (!isLoadStatus(status)) continue;
-    stats[status] = rowNumber(row, "n");
-  }
-  return stats;
-}
-
-function requireLoad(db: DatabaseSync, id: number): InboundLoad {
-  const load = getLoad(db, id);
+function requireLoad(dir: string, id: number): InboundLoad {
+  const load = readLoadFile(dir, id);
   if (!load) throw new AppError("Load not found.");
   return load;
 }
 
-function statusBlock(status: LoadStatus, action: "start" | "finish"): void {
-  if (status === "done") throw new AppError("This load is already done.");
-  if (action === "start" && status === "unloading") {
-    throw new AppError("Unloading has already started.");
-  }
-  if (action === "finish" && status === "waiting") {
-    throw new AppError("Start unloading before you finish this load.");
-  }
+function requireStatus(load: InboundLoad, status: LoadStatus, message: string): void {
+  if (load.status !== status) throw new AppError(message);
 }
 
-export function startUnload(db: DatabaseSync, id: number, input: StartUnloadInput): void {
-  const data = normalizeStart(input);
-  withTransaction(db, () => {
-    const load = requireLoad(db, id);
-    statusBlock(load.status, "start");
-    if (new Date(data.startedAt).getTime() < new Date(load.arrivedAt).getTime()) {
-      throw new AppError("Unload cannot start before the trailer arrived.");
+export function createLoad(dir: string, input: ReceivingInput): number {
+  const data = normalizeReceiving(input);
+  ensureDir(dir);
+  const now = nowIso();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const id = nextLoadId(dir);
+    const load: InboundLoad = {
+      id,
+      status: "new",
+      arrivedAt: data.arrivedAt,
+      carrier: data.carrier,
+      trailerNumber: data.trailerNumber,
+      sealNumber: data.sealNumber,
+      bolPro: data.bolPro,
+      references: data.references,
+      dockDoor: data.dockDoor,
+      driverName: data.driverName,
+      expectedPallets: data.expectedPallets,
+      expectedPieces: data.expectedPieces,
+      receivingNotes: data.notes,
+      unloadStartedAt: null,
+      unloadedBy: null,
+      unloadFinishedAt: null,
+      receivedPallets: null,
+      receivedPieces: null,
+      sortOutcome: null,
+      putawayLocations: null,
+      alterationNote: null,
+      createdAt: now,
+      updatedAt: now,
+      exceptions: [],
+    };
+    try {
+      writeLoadFile(dir, load, true);
+      return id;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") continue;
+      throw error;
     }
-    const now = nowIso();
-    const update = db
-      .prepare(
-        `UPDATE inbound_loads
-         SET status = 'unloading', unload_started_at = ?, unloaded_by = ?, updated_at = ?
-         WHERE id = ? AND status = 'waiting'`,
-      )
-      .run(data.startedAt, data.unloadedBy, now, id);
-    if (changed(update) !== 1) throw new AppError("This load changed. Refresh and try again.");
+  }
+  throw new Error("Could not create a load file.");
+}
+
+export function getLoad(dir: string, id: number): InboundLoad | null {
+  return readLoadFile(dir, id);
+}
+
+export function listLoads(dir: string, filter: LoadListFilter = {}): LoadListItem[] {
+  const loads = listLoadFiles(dir).filter((load) => !filter.status || load.status === filter.status);
+  const oldestFirst = filter.status === "new" || filter.status === "confirmed" || filter.status === "arrived";
+  loads.sort((a, b) => {
+    const byTime = a.arrivedAt.localeCompare(b.arrivedAt);
+    if (byTime !== 0) return oldestFirst ? byTime : -byTime;
+    return oldestFirst ? a.id - b.id : b.id - a.id;
+  });
+  return loads.map(toListItem);
+}
+
+export function loadStats(dir: string): LoadStats {
+  const stats: LoadStats = { new: 0, confirmed: 0, arrived: 0, received: 0, altered: 0 };
+  for (const load of listLoadFiles(dir)) stats[load.status] += 1;
+  return stats;
+}
+
+export function confirmLoad(dir: string, id: number): void {
+  const load = requireLoad(dir, id);
+  requireStatus(load, "new", "Confirm a delivery only while it is New.");
+  writeLoadFile(dir, { ...load, status: "confirmed", updatedAt: nowIso() });
+}
+
+export function arriveLoad(dir: string, id: number): void {
+  const load = requireLoad(dir, id);
+  requireStatus(load, "confirmed", "Mark a delivery arrived only after it is Confirmed.");
+  writeLoadFile(dir, { ...load, status: "arrived", updatedAt: nowIso() });
+}
+
+export function receiveLoad(
+  dir: string,
+  id: number,
+  start: StartUnloadInput,
+  input: CompleteUnloadInput,
+): void {
+  const load = requireLoad(dir, id);
+  requireStatus(load, "arrived", "Receive a delivery only after it has Arrived.");
+  const started = normalizeStart(start);
+  if (new Date(started.startedAt).getTime() < new Date(load.arrivedAt).getTime()) {
+    throw new AppError("Unload cannot start before the trailer arrived.");
+  }
+  const data = normalizeComplete(input, {
+    pallets: load.expectedPallets,
+    pieces: load.expectedPieces,
+  });
+  if (new Date(data.finishedAt).getTime() < new Date(started.startedAt).getTime()) {
+    throw new AppError("Unload cannot finish before it started.");
+  }
+  const now = nowIso();
+  writeLoadFile(dir, {
+    ...load,
+    status: "received",
+    unloadStartedAt: started.startedAt,
+    unloadedBy: started.unloadedBy,
+    unloadFinishedAt: data.finishedAt,
+    receivedPallets: data.receivedPallets,
+    receivedPieces: data.receivedPieces,
+    sortOutcome: data.sortOutcome,
+    putawayLocations: data.putawayLocations,
+    exceptions: data.exceptions.map((exception, index) => ({
+      id: index + 1,
+      kind: exception.kind,
+      quantity: exception.quantity,
+      notes: exception.notes,
+      createdAt: now,
+    })),
+    updatedAt: now,
   });
 }
 
-export function completeUnload(db: DatabaseSync, id: number, input: CompleteUnloadInput): void {
-  withTransaction(db, () => {
-    const load = requireLoad(db, id);
-    statusBlock(load.status, "finish");
-    if (!load.unloadStartedAt) throw new AppError("Start unloading before you finish this load.");
-    const data = normalizeComplete(input, {
-      pallets: load.expectedPallets,
-      pieces: load.expectedPieces,
-    });
-    if (new Date(data.finishedAt).getTime() < new Date(load.unloadStartedAt).getTime()) {
-      throw new AppError("Unload cannot finish before it started.");
-    }
-    const now = nowIso();
-    const update = db
-      .prepare(
-        `UPDATE inbound_loads
-         SET status = 'done',
-             unload_finished_at = ?,
-             received_pallets = ?,
-             received_pieces = ?,
-             sort_outcome = ?,
-             putaway_locations = ?,
-             updated_at = ?
-         WHERE id = ? AND status = 'unloading'`,
-      )
-      .run(
-        data.finishedAt,
-        data.receivedPallets,
-        data.receivedPieces,
-        data.sortOutcome,
-        data.putawayLocations,
-        now,
-        id,
-      );
-    if (changed(update) !== 1) throw new AppError("This load changed. Refresh and try again.");
-    const insert = db.prepare(
-      `INSERT INTO inbound_exceptions (load_id, kind, quantity, notes, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    );
-    for (const exception of data.exceptions) {
-      insert.run(id, exception.kind, exception.quantity, exception.notes, now);
-    }
-  });
+export function alterationFromForm(formData: FormData): string {
+  return String(formData.get("alterationNote") ?? "");
 }
+
+export function alterLoad(dir: string, id: number, note: string): void {
+  const load = requireLoad(dir, id);
+  requireStatus(load, "received", "Alter a delivery only after it is Received.");
+  const alterationNote = requiredText(
+    note,
+    "Describe what changed.",
+    2000,
+    "Keep the change under 2000 characters.",
+  );
+  writeLoadFile(dir, { ...load, status: "altered", alterationNote, updatedAt: nowIso() });
+}
+

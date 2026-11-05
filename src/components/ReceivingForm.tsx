@@ -29,7 +29,7 @@ export function ReceivingForm({ defaultArrivedAt }: { defaultArrivedAt: string }
         </p>
       ) : null}
       <fieldset className="fee-fields">
-        <legend>Stage 1 · Receiving</legend>
+        <legend>Trailer</legend>
         <label className="field">
           Arrival
           <input type="datetime-local" required {...bind("arrivedAt")} />
@@ -85,12 +85,11 @@ export function ReceivingForm({ defaultArrivedAt }: { defaultArrivedAt: string }
         </label>
       </fieldset>
       <p className="hint">
-        Saving puts this trailer in the waiting queue. It is not unloaded yet. Unload, sort, and
-        putaway happen later on this same load.
+        Saving creates this delivery at New. It is on file and has not been confirmed yet.
       </p>
       <div className="form-actions">
         <SubmitButton className="button primary" pendingLabel="Saving…">
-          Receive trailer
+          Save as New
         </SubmitButton>
       </div>
     </form>

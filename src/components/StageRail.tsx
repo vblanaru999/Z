@@ -11,7 +11,7 @@ export function StageRail({ status }: { status: LoadStatus }) {
           aria-current={step.state === "current" ? "step" : undefined}
         >
           <span className="stage-name">{step.label}</span>
-          <span className="stage-state">{progressStateLabel(step, status)}</span>
+          <span className="stage-state">{progressStateLabel(step)}</span>
         </li>
       ))}
     </ol>

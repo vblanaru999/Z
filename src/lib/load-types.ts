@@ -1,12 +1,23 @@
-/** One trailer: receiving captures it, then it waits, then unloading finishes it. */
-export const LOAD_STATUSES = ["waiting", "unloading", "done"] as const;
+/** A delivery moves through these stages in order. */
+export const LOAD_STATUSES = ["new", "confirmed", "arrived", "received", "altered"] as const;
 
 export type LoadStatus = (typeof LOAD_STATUSES)[number];
 
 export const LOAD_STATUS_LABELS: Record<LoadStatus, string> = {
-  waiting: "Waiting",
-  unloading: "Unloading",
-  done: "Done",
+  new: "New",
+  confirmed: "Confirmed",
+  arrived: "Arrived",
+  received: "Received",
+  altered: "Altered",
+};
+
+/** What the stage means on the list and the delivery page. */
+export const STAGE_MEANINGS: Record<LoadStatus, string> = {
+  new: "On file, not confirmed yet.",
+  confirmed: "The warehouse confirmed this delivery is expected.",
+  arrived: "The trailer is at the dock and has not been received.",
+  received: "Unloaded, counted, sorted, and put away.",
+  altered: "Changed after it was received.",
 };
 
 export const SORT_OUTCOMES = ["sorted", "partial", "held", "cross_dock"] as const;
@@ -37,9 +48,9 @@ export const EXCEPTION_LABELS: Record<ExceptionKind, string> = {
   overage: "Overage",
 };
 
-export const LOAD_PROGRESS_KEYS = ["receiving", "waiting", "unloading", "done"] as const;
+export const LOAD_PROGRESS_KEYS = LOAD_STATUSES;
 
-export type LoadProgressKey = (typeof LOAD_PROGRESS_KEYS)[number];
+export type LoadProgressKey = LoadStatus;
 
 export type StageStepState = "complete" | "current" | "upcoming";
 
@@ -49,12 +60,7 @@ export type LoadProgressStep = {
   state: StageStepState;
 };
 
-const PROGRESS_LABELS: Record<LoadProgressKey, string> = {
-  receiving: "Receiving",
-  waiting: "Waiting",
-  unloading: "Unloading",
-  done: "Done",
-};
+const PROGRESS_LABELS: Record<LoadProgressKey, string> = LOAD_STATUS_LABELS;
 
 export function isLoadStatus(value: string): value is LoadStatus {
   return (LOAD_STATUSES as readonly string[]).includes(value);
@@ -68,8 +74,14 @@ export function isExceptionKind(value: string): value is ExceptionKind {
   return (EXCEPTION_KINDS as readonly string[]).includes(value);
 }
 
+export function nextStage(status: LoadStatus): LoadStatus | null {
+  const index = LOAD_STATUSES.indexOf(status);
+  if (index < 0 || index >= LOAD_STATUSES.length - 1) return null;
+  return LOAD_STATUSES[index + 1] ?? null;
+}
+
 export function loadProgress(status: LoadStatus): LoadProgressStep[] {
-  const currentIndex = status === "waiting" ? 1 : status === "unloading" ? 2 : 3;
+  const currentIndex = LOAD_STATUSES.indexOf(status);
   return LOAD_PROGRESS_KEYS.map((key, index) => ({
     key,
     label: PROGRESS_LABELS[key],
@@ -77,23 +89,10 @@ export function loadProgress(status: LoadStatus): LoadProgressStep[] {
   }));
 }
 
-export function progressStateLabel(
-  step: LoadProgressStep,
-  status: LoadStatus,
-): string {
+export function progressStateLabel(step: LoadProgressStep): string {
   if (step.state === "upcoming") return "Not yet";
-  if (step.state === "current" && status === "done") return "Finished";
   if (step.state === "current") return "Current";
   return "Finished";
-}
-
-/** How the two stages read on the list. Receiving is captured as soon as the load exists. */
-export function stagePair(status: LoadStatus): { receiving: string; unloading: string } {
-  return {
-    receiving: "Captured",
-    unloading:
-      status === "waiting" ? "Not started" : status === "unloading" ? "In progress" : "Complete",
-  };
 }
 
 export function countPhrase(count: number, singular: string, plural: string): string {
@@ -185,6 +184,7 @@ export type InboundLoad = LoadListItem & {
   putawayLocations: string | null;
   createdAt: string;
   updatedAt: string;
+  alterationNote: string | null;
   exceptions: LoadException[];
 };
 

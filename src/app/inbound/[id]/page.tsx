@@ -1,32 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { arriveLoadAction, confirmLoadAction } from "../../../app/actions";
 import { Banner } from "../../../components/Banner";
 import { CompleteUnloadForm } from "../../../components/CompleteUnloadForm";
 import { PageHeader } from "../../../components/PageHeader";
 import { StageRail } from "../../../components/StageRail";
-import { StartUnloadForm } from "../../../components/StartUnloadForm";
+import { AdvanceStageForm, AlterDeliveryForm } from "../../../components/StageMoveForms";
 import { ExceptionBadge, LoadStatusBadge } from "../../../components/StatusBadge";
-import { getDb } from "../../../lib/db";
 import { firstParam, formatWhen, localDateTimeInputValue } from "../../../lib/format";
 import {
   countPhrase,
   describeQuantityGap,
   SORT_OUTCOME_LABELS,
-  type InboundLoad,
+  STAGE_MEANINGS,
 } from "../../../lib/load-types";
-import { getLoad } from "../../../lib/loads";
+import { getLoad, inboundDataDir } from "../../../lib/loads";
 
 export const dynamic = "force-dynamic";
-
-function lede(load: InboundLoad): string {
-  if (load.status === "waiting") {
-    return "Receiving is captured. This trailer is waiting and has not been unloaded.";
-  }
-  if (load.status === "unloading") {
-    return "Unloading is in progress on this same load. Finish it with counts, sort, and putaway.";
-  }
-  return "Receiving and unloading are both recorded on this load.";
-}
 
 function LocationList({ value }: { value: string }) {
   const lines = value
@@ -54,7 +44,7 @@ export default async function InboundLoadPage({
   const query = await searchParams;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const load = getLoad(getDb(), id);
+  const load = getLoad(inboundDataDir(), id);
   if (!load) notFound();
 
   const received =
@@ -72,12 +62,12 @@ export default async function InboundLoadPage({
       <PageHeader
         kicker={`Load ${load.id} · ${load.carrier}`}
         title={load.trailerNumber}
-        lede={lede(load)}
+        lede={STAGE_MEANINGS[load.status]}
         action={
           <div className="form-actions">
             <LoadStatusBadge status={load.status} />
             <Link href="/" className="button quiet">
-              Waiting queue
+              All deliveries
             </Link>
           </div>
         }
@@ -88,8 +78,8 @@ export default async function InboundLoadPage({
         <div className="panels">
           <section className="panel">
             <div className="section-head">
-              <h2>Stage 1 · Receiving</h2>
-              <span className="muted">Captured</span>
+              <h2>Delivery record</h2>
+              <LoadStatusBadge status={load.status} />
             </div>
             <dl className="facts">
               <div>
@@ -146,14 +136,16 @@ export default async function InboundLoadPage({
 
           <section className="panel">
             <div className="section-head">
-              <h2>Stage 2 · Unloading</h2>
-              {load.status === "waiting" ? <span className="muted">Not started</span> : null}
-              {load.status === "unloading" ? <span className="muted">In progress</span> : null}
-              {load.status === "done" ? <span className="muted">Complete</span> : null}
+              <h2>Receipt</h2>
+              {load.status === "received" || load.status === "altered" ? (
+                <span className="muted">Recorded</span>
+              ) : (
+                <span className="muted">Not yet</span>
+              )}
             </div>
-            {load.status === "waiting" ? (
+            {load.status === "new" || load.status === "confirmed" ? (
               <p className="empty">
-                This load is in the waiting queue. Unloading has not started, and nothing has been
+                Receipt is recorded after this delivery has Arrived. Nothing has been unloaded or
                 put away.
               </p>
             ) : null}
@@ -181,7 +173,7 @@ export default async function InboundLoadPage({
                 ) : null}
               </dl>
             ) : null}
-            {load.status === "done" &&
+            {(load.status === "received" || load.status === "altered") &&
             load.receivedPallets !== null &&
             load.receivedPieces !== null &&
             received ? (
@@ -230,33 +222,54 @@ export default async function InboundLoadPage({
                 </div>
               </div>
             ) : null}
-            {load.status === "unloading" ? (
+            {load.status === "arrived" ? (
               <div style={{ marginTop: 16 }}>
                 <CompleteUnloadForm
                   loadId={load.id}
                   expectedPallets={load.expectedPallets}
                   expectedPieces={load.expectedPieces}
+                  defaultStartedAt={localDateTimeInputValue()}
                   defaultFinishedAt={localDateTimeInputValue()}
                 />
+              </div>
+            ) : null}
+            {load.alterationNote ? (
+              <div style={{ marginTop: 16 }}>
+                <p className="kicker">What changed</p>
+                <p className="notes">{load.alterationNote}</p>
               </div>
             ) : null}
           </section>
         </div>
         <aside className="action-card panel">
-          <h2>{load.status === "done" ? "Done" : "Next step"}</h2>
-          {load.status === "waiting" ? (
-            <StartUnloadForm loadId={load.id} defaultStartedAt={localDateTimeInputValue()} />
+          <h2>{load.status === "altered" ? "Altered" : "Next stage"}</h2>
+          {load.status === "new" ? (
+            <AdvanceStageForm
+              loadId={load.id}
+              action={confirmLoadAction}
+              label="Mark confirmed"
+              pendingLabel="Saving…"
+              hint="Confirmed means the warehouse confirmed this delivery is expected."
+            />
           ) : null}
-          {load.status === "unloading" ? (
+          {load.status === "confirmed" ? (
+            <AdvanceStageForm
+              loadId={load.id}
+              action={arriveLoadAction}
+              label="Mark arrived"
+              pendingLabel="Saving…"
+              hint="Arrived means the trailer is at the dock and has not been received."
+            />
+          ) : null}
+          {load.status === "arrived" ? (
             <p className="hint">
-              Record what came off the trailer, how it was sorted, and where it was put away. That
-              finishes this load.
+              Received means the freight was unloaded, counted, sorted, and put away. Record that
+              in the receipt form.
             </p>
           ) : null}
-          {load.status === "done" ? (
-            <p className="hint">
-              This load is done. Receiving and unloading stay on the record.
-            </p>
+          {load.status === "received" ? <AlterDeliveryForm loadId={load.id} /> : null}
+          {load.status === "altered" ? (
+            <p className="hint">This delivery is Altered. The change stays on the record.</p>
           ) : null}
         </aside>
       </div>

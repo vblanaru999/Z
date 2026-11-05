@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { completeUnloadAction } from "../app/actions";
+import { receiveLoadAction } from "../app/actions";
 import {
   countPhrase,
   EXCEPTION_KINDS,
@@ -17,15 +17,19 @@ export function CompleteUnloadForm({
   loadId,
   expectedPallets,
   expectedPieces,
+  defaultStartedAt,
   defaultFinishedAt,
 }: {
   loadId: number;
   expectedPallets: number;
   expectedPieces: number;
+  defaultStartedAt: string;
   defaultFinishedAt: string;
 }) {
-  const [state, action] = useActionState(completeUnloadAction, { error: null });
+  const [state, action] = useActionState(receiveLoadAction, { error: null });
   const { bind, choose } = useFields({
+    startedAt: defaultStartedAt,
+    unloadedBy: "",
     finishedAt: defaultFinishedAt,
     receivedPallets: "",
     receivedPieces: "",
@@ -58,6 +62,14 @@ export function CompleteUnloadForm({
         </div>
       </div>
       <div className="form-grid">
+        <label className="field">
+          Unload started
+          <input type="datetime-local" required {...bind("startedAt")} />
+        </label>
+        <label className="field">
+          Unloaded by
+          <input required maxLength={120} {...bind("unloadedBy")} />
+        </label>
         <label className="field">
           Unload finished
           <input type="datetime-local" required {...bind("finishedAt")} />
@@ -119,7 +131,7 @@ export function CompleteUnloadForm({
       </fieldset>
       <div className="form-actions">
         <SubmitButton className="button good" pendingLabel="Saving…">
-          Finish unload
+          Mark received
         </SubmitButton>
       </div>
     </form>

@@ -20,7 +20,8 @@ const display = Fraunces({
 
 export const metadata: Metadata = {
   title: { default: "Inbound", template: "%s · Inbound" },
-  description: "Receive a trailer, leave it waiting, then unload, sort, and put the same load away.",
+  description:
+    "Move an inbound delivery through New, Confirmed, Arrived, Received, and Altered.",
   robots: { index: false, follow: false },
 };
 
@@ -42,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </span>
             </a>
             <SideNav />
-            <p className="side-note">One trailer, two stages. Receiving, then unloading.</p>
+            <p className="side-note">New, Confirmed, Arrived, Received, Altered.</p>
           </aside>
           <main id="content" className="content">
             <div className="frame">{children}</div>

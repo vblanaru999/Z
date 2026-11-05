@@ -76,47 +76,6 @@ CREATE INDEX IF NOT EXISTS idx_claims_driver ON claims(driver_id);
 CREATE INDEX IF NOT EXISTS idx_claims_type ON claims(claim_type_id);
 CREATE INDEX IF NOT EXISTS idx_events_claim ON claim_events(claim_id);
 CREATE INDEX IF NOT EXISTS idx_emails_claim ON emails(claim_id);
-
--- One inbound trailer. Receiving creates it as waiting. Unloading finishes it as done.
-CREATE TABLE IF NOT EXISTS inbound_loads (
-  id INTEGER PRIMARY KEY,
-  status TEXT NOT NULL CHECK (status IN ('waiting', 'unloading', 'done')),
-  arrived_at TEXT NOT NULL,
-  carrier TEXT NOT NULL,
-  trailer_number TEXT NOT NULL,
-  seal_number TEXT NOT NULL,
-  bol_pro TEXT NOT NULL,
-  reference_numbers TEXT NOT NULL,
-  dock_door TEXT NOT NULL,
-  driver_name TEXT NOT NULL,
-  expected_pallets INTEGER NOT NULL CHECK (expected_pallets >= 0),
-  expected_pieces INTEGER NOT NULL CHECK (expected_pieces >= 0),
-  receiving_notes TEXT NOT NULL,
-  unload_started_at TEXT,
-  unloaded_by TEXT,
-  unload_finished_at TEXT,
-  received_pallets INTEGER CHECK (received_pallets IS NULL OR received_pallets >= 0),
-  received_pieces INTEGER CHECK (received_pieces IS NULL OR received_pieces >= 0),
-  sort_outcome TEXT CHECK (
-    sort_outcome IS NULL OR sort_outcome IN ('sorted', 'partial', 'held', 'cross_dock')
-  ),
-  putaway_locations TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS inbound_exceptions (
-  id INTEGER PRIMARY KEY,
-  load_id INTEGER NOT NULL REFERENCES inbound_loads(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK (kind IN ('damage', 'shortage', 'overage')),
-  quantity INTEGER CHECK (quantity IS NULL OR quantity >= 0),
-  notes TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_inbound_loads_status ON inbound_loads(status);
-CREATE INDEX IF NOT EXISTS idx_inbound_loads_arrived ON inbound_loads(arrived_at);
-CREATE INDEX IF NOT EXISTS idx_inbound_exceptions_load ON inbound_exceptions(load_id);
 `;
 
 export function databasePath(): string {

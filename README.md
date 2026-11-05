@@ -1,10 +1,10 @@
 # Inbound
 
-Inbound records one trailer from arrival through putaway. Receiving leaves the load waiting. Unloading finishes that same load. This screen is not the claim tracker.
+Inbound records one delivery as it moves through New, Confirmed, Arrived, Received, and Altered. This screen is not the claim tracker.
 
 ## Run it locally
 
-Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite` module). No email setup and no seed data.
+Requires Node.js 22.13 or newer. No email setup and no seed data.
 
 ```bash
 npm install
@@ -12,7 +12,7 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). That page is the waiting queue. Receive a trailer, leave it waiting, then open the same load and finish unloading. The database file is created at `data/claim.db` on first use. There is no login.
+Open [http://localhost:3000](http://localhost:3000). That page is the delivery list. Each delivery is one JSON file in `data/inbound/`, named by id (`data/inbound/1.json`, `data/inbound/2.json`). The folder is created the first time you save a delivery, and it is gitignored, so the files stay on this machine. Set `INBOUND_DATA_DIR` if they should live somewhere else. There is no login.
 
 Production build:
 
@@ -21,16 +21,19 @@ npm run build
 npm start
 ```
 
-Set `DATABASE_PATH` if the SQLite file should live somewhere else.
+The claim tracker, if you open it, still uses SQLite. Set `DATABASE_PATH` if that file should live somewhere else. Inbound deliveries do not use it.
 
-## Inbound loads
+## Inbound deliveries
 
-An inbound load is one trailer. Both stages stay on that same record.
+One delivery is one trailer, stored in its own file. It moves through these stages in order. The list and the delivery page both show the current stage.
 
-1. **Receiving.** When the trailer arrives, record the arrival time, carrier, trailer number, seal number, BOL/PRO, PO or ASN references, dock door, driver name, expected pallet and piece counts, and notes. Saving leaves the load **Waiting**. It is not unloaded yet.
-2. **Unloading.** Open that waiting load when the dock is ready. Record when unloading started and who did it. The load is then **Unloading**. When the work is finished, record the finish time, the quantities received against the expected counts, how it was sorted, the putaway locations, and any damage, shortage, or overage. Saving that marks the load **Done**.
+1. **New.** The delivery is on file and has not been confirmed yet. Saving the trailer record (arrival time, carrier, trailer number, seal, BOL/PRO, PO or ASN, dock door, driver, expected pallet and piece counts, notes) starts it here.
+2. **Confirmed.** The warehouse confirmed this delivery is expected.
+3. **Arrived.** The trailer is at the dock and has not been received.
+4. **Received.** The freight was unloaded, counted, sorted, and put away. This records who unloaded it, start and finish times, received counts against the expected counts, the sort outcome, putaway locations, and any damage, shortage, or overage.
+5. **Altered.** The delivery was changed after it was received. A note says what changed.
 
-The queue and the load page both show the two stages.
+A delivery cannot skip a stage.
 
 ## Claim tracker
 

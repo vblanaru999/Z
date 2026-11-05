@@ -3,15 +3,15 @@ import { PageHeader } from "../../../components/PageHeader";
 import { localDateTimeInputValue } from "../../../lib/format";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Receive a trailer" };
+export const metadata = { title: "New delivery" };
 
 export default function NewInboundPage() {
   return (
     <>
       <PageHeader
-        kicker="Stage 1"
-        title="Receive a trailer"
-        lede="Capture the load when it arrives. It stays in the waiting queue until someone unloads it."
+        kicker="New"
+        title="New delivery"
+        lede="Record the trailer. Saving leaves the delivery at New: on file, not confirmed yet."
       />
       <section className="panel">
         <ReceivingForm defaultArrivedAt={localDateTimeInputValue()} />

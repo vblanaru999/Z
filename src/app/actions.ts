@@ -21,13 +21,17 @@ import {
 } from "../lib/forms";
 import { createMailer } from "../lib/mailer";
 import {
+  alterationFromForm,
+  alterLoad,
+  arriveLoad,
   completeFromForm,
-  completeUnload,
+  confirmLoad,
   createLoad,
+  inboundDataDir,
   loadIdFromForm,
+  receiveLoad,
   receivingFromForm,
   startFromForm,
-  startUnload,
 } from "../lib/loads";
 
 function bail(path: string, error: unknown): never {
@@ -138,51 +142,79 @@ export async function createLoadAction(
 ): Promise<{ error: string | null }> {
   let id = 0;
   try {
-    id = createLoad(getDb(), receivingFromForm(formData));
+    id = createLoad(inboundDataDir(), receivingFromForm(formData));
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
     throw error;
   }
   refreshLoad(id);
-  redirect(
-    `/inbound/${id}?notice=${encodeURIComponent("Trailer received. It is waiting to be unloaded.")}`,
-  );
+  redirect(`/inbound/${id}?notice=${encodeURIComponent("Delivery saved. It is New.")}`);
 }
 
-export async function startUnloadAction(
+export async function confirmLoadAction(
   _previous: { error: string | null },
   formData: FormData,
 ): Promise<{ error: string | null }> {
   let id = 0;
   try {
     id = loadIdFromForm(formData);
-    startUnload(getDb(), id, startFromForm(formData));
+    confirmLoad(inboundDataDir(), id);
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
     throw error;
   }
   refreshLoad(id);
-  redirect(
-    `/inbound/${id}?notice=${encodeURIComponent("Unloading started. Finish it when the freight is sorted and put away.")}`,
-  );
+  redirect(`/inbound/${id}?notice=${encodeURIComponent("Delivery confirmed.")}`);
 }
 
-export async function completeUnloadAction(
+export async function arriveLoadAction(
   _previous: { error: string | null },
   formData: FormData,
 ): Promise<{ error: string | null }> {
   let id = 0;
   try {
     id = loadIdFromForm(formData);
-    completeUnload(getDb(), id, completeFromForm(formData));
+    arriveLoad(inboundDataDir(), id);
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+  refreshLoad(id);
+  redirect(`/inbound/${id}?notice=${encodeURIComponent("Delivery arrived.")}`);
+}
+
+export async function receiveLoadAction(
+  _previous: { error: string | null },
+  formData: FormData,
+): Promise<{ error: string | null }> {
+  let id = 0;
+  try {
+    id = loadIdFromForm(formData);
+    receiveLoad(inboundDataDir(), id, startFromForm(formData), completeFromForm(formData));
   } catch (error) {
     if (error instanceof AppError) return { error: error.message };
     throw error;
   }
   refreshLoad(id);
   redirect(
-    `/inbound/${id}?notice=${encodeURIComponent("Load done. Unload, sort, and putaway are recorded.")}`,
+    `/inbound/${id}?notice=${encodeURIComponent("Delivery received. Unload, sort, and putaway are recorded.")}`,
   );
+}
+
+export async function alterLoadAction(
+  _previous: { error: string | null },
+  formData: FormData,
+): Promise<{ error: string | null }> {
+  let id = 0;
+  try {
+    id = loadIdFromForm(formData);
+    alterLoad(inboundDataDir(), id, alterationFromForm(formData));
+  } catch (error) {
+    if (error instanceof AppError) return { error: error.message };
+    throw error;
+  }
+  refreshLoad(id);
+  redirect(`/inbound/${id}?notice=${encodeURIComponent("Delivery altered.")}`);
 }
 
 export async function waiveClaimAction(formData: FormData): Promise<void> {
