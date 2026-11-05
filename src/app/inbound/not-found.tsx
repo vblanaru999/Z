@@ -7,8 +7,8 @@ export default function InboundNotFound() {
       <h1>That load is not on file.</h1>
       <p className="lede">The link may be wrong. The waiting queue is still here.</p>
       <p>
-        <Link href="/inbound" className="button primary">
-          Back to inbound loads
+        <Link href="/" className="button primary">
+          Back to the waiting queue
         </Link>
       </p>
     </>

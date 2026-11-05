@@ -1,14 +1,10 @@
-# Claim
+# Inbound
 
-Claim is a small operations app for delivery procedure misses. A person records what a driver did incorrectly, sends a formal warning email, and can later apply the fee already stored on that driver's contract.
+Inbound records one trailer from arrival through putaway. Receiving leaves the load waiting. Unloading finishes that same load. This screen is not the claim tracker.
 
-It also records inbound trailers. One load moves from receiving, to a waiting queue, through unloading, and then to done.
+## Run it locally
 
-Data entry is manual. Each claim has a `source`: `manual` today, with `xcelerator` reserved for a later import. This app does not talk to Xcelerator.
-
-## Run it
-
-Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite` module).
+Requires Node.js 22.13 or newer (it uses the built-in `node:sqlite` module). No email setup and no seed data.
 
 ```bash
 npm install
@@ -16,13 +12,7 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The database is created at `data/claim.db` on first use, with the three claim types already loaded. There is no login.
-
-Optional sample drivers and one recorded claim:
-
-```bash
-npm run db:seed
-```
+Open [http://localhost:3000](http://localhost:3000). That page is the waiting queue. Receive a trailer, leave it waiting, then open the same load and finish unloading. The database file is created at `data/claim.db` on first use. There is no login.
 
 Production build:
 
@@ -31,15 +21,7 @@ npm run build
 npm start
 ```
 
-Set `DATABASE_PATH` if the SQLite file should live somewhere other than `data/claim.db`.
-
-## What you can do
-
-1. Add a driver: name, email, a default contract fee, and an optional fee for each claim type.
-2. Record a claim: driver, claim type, optional order reference, what went wrong, and when it happened. Recording does not send email.
-3. Open the claim and send the warning. With `SMTP2GO_API_KEY` set, the message goes through SMTP2GO and the claim becomes **Warning sent** only after SMTP2GO accepts it. Without that key, SMTP is used when it is fully configured. Otherwise the message is saved in the claim's outbox and the status becomes **Warning sent**.
-4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
-5. Resolve the claim after the fee, or waive it earlier to close with no fee.
+Set `DATABASE_PATH` if the SQLite file should live somewhere else.
 
 ## Inbound loads
 
@@ -48,7 +30,25 @@ An inbound load is one trailer. Both stages stay on that same record.
 1. **Receiving.** When the trailer arrives, record the arrival time, carrier, trailer number, seal number, BOL/PRO, PO or ASN references, dock door, driver name, expected pallet and piece counts, and notes. Saving leaves the load **Waiting**. It is not unloaded yet.
 2. **Unloading.** Open that waiting load when the dock is ready. Record when unloading started and who did it. The load is then **Unloading**. When the work is finished, record the finish time, the quantities received against the expected counts, how it was sorted, the putaway locations, and any damage, shortage, or overage. Saving that marks the load **Done**.
 
-The inbound list shows the waiting queue and both stages. Open a load to see receiving and unloading together. Loads are stored in the same SQLite file as claims.
+The queue and the load page both show the two stages.
+
+## Claim tracker
+
+The same repository still has the older claim tracker for delivery procedure misses. It is separate from inbound. Open [http://localhost:3000/open](http://localhost:3000/open) for that board. Data entry there is manual. Each claim has a `source`: `manual` today, with `xcelerator` reserved for a later import. This app does not talk to Xcelerator.
+
+Optional sample drivers and one recorded claim:
+
+```bash
+npm run db:seed
+```
+
+## What you can do
+
+1. Add a driver: name, email, a default contract fee, and an optional fee for each claim type.
+2. Record a claim: driver, claim type, optional order reference, what went wrong, and when it happened. Recording does not send email.
+3. Open the claim and send the warning. With `SMTP2GO_API_KEY` set, the message goes through SMTP2GO and the claim becomes **Warning sent** only after SMTP2GO accepts it. Without that key, SMTP is used when it is fully configured. Otherwise the message is saved in the claim's outbox and the status becomes **Warning sent**.
+4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
+5. Resolve the claim after the fee, or waive it earlier to close with no fee.
 
 Seeded claim types:
 

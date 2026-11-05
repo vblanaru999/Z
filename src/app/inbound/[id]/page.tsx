@@ -76,7 +76,7 @@ export default async function InboundLoadPage({
         action={
           <div className="form-actions">
             <LoadStatusBadge status={load.status} />
-            <Link href="/inbound" className="button quiet">
+            <Link href="/" className="button quiet">
               Waiting queue
             </Link>
           </div>

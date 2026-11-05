@@ -19,9 +19,8 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Claim", template: "%s · Claim" },
-  description:
-    "Track delivery procedure misses, and receive inbound trailers through unload and putaway.",
+  title: { default: "Inbound", template: "%s · Inbound" },
+  description: "Receive a trailer, leave it waiting, then unload, sort, and put the same load away.",
   robots: { index: false, follow: false },
 };
 
@@ -36,14 +35,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="app">
           <aside className="sidebar">
             <a className="brand" href="/">
-              <span className="brand-mark">Cl</span>
+              <span className="brand-mark">In</span>
               <span className="brand-text">
-                <strong>Claim</strong>
-                <span>Delivery exceptions</span>
+                <strong>Inbound</strong>
+                <span>Dock loads</span>
               </span>
             </a>
             <SideNav />
-            <p className="side-note">Entered by hand. Xcelerator import comes later.</p>
+            <p className="side-note">One trailer, two stages. Receiving, then unloading.</p>
           </aside>
           <main id="content" className="content">
             <div className="frame">{children}</div>

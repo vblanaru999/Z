@@ -38,7 +38,7 @@ function bail(path: string, error: unknown): never {
 }
 
 function refreshClaim(id: number): void {
-  revalidatePath("/");
+  revalidatePath("/open");
   revalidatePath("/claims");
   revalidatePath(`/claims/${id}`);
   revalidatePath("/drivers");
@@ -127,6 +127,7 @@ export async function resolveClaimAction(formData: FormData): Promise<void> {
 }
 
 function refreshLoad(id: number): void {
+  revalidatePath("/");
   revalidatePath("/inbound");
   revalidatePath(`/inbound/${id}`);
 }
