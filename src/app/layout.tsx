@@ -20,7 +20,8 @@ const display = Fraunces({
 
 export const metadata: Metadata = {
   title: { default: "Claim", template: "%s · Claim" },
-  description: "Track delivery procedure misses, warn drivers, and apply contract fees.",
+  description:
+    "Track delivery procedure misses, and receive inbound trailers through unload and putaway.",
   robots: { index: false, follow: false },
 };
 

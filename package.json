@@ -2,7 +2,7 @@
   "name": "claim",
   "version": "0.1.0",
   "private": true,
-  "description": "Track delivery procedure misses, warn drivers, and apply contract fees.",
+  "description": "Track delivery procedure misses, and receive inbound trailers through unload and putaway.",
   "engines": {
     "node": ">=22.13"
   },

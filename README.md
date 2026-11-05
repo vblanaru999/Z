@@ -2,6 +2,8 @@
 
 Claim is a small operations app for delivery procedure misses. A person records what a driver did incorrectly, sends a formal warning email, and can later apply the fee already stored on that driver's contract.
 
+It also records inbound trailers. One load moves from receiving, to a waiting queue, through unloading, and then to done.
+
 Data entry is manual. Each claim has a `source`: `manual` today, with `xcelerator` reserved for a later import. This app does not talk to Xcelerator.
 
 ## Run it
@@ -38,6 +40,15 @@ Set `DATABASE_PATH` if the SQLite file should live somewhere other than `data/cl
 3. Open the claim and send the warning. With `SMTP2GO_API_KEY` set, the message goes through SMTP2GO and the claim becomes **Warning sent** only after SMTP2GO accepts it. Without that key, SMTP is used when it is fully configured. Otherwise the message is saved in the claim's outbox and the status becomes **Warning sent**.
 4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
 5. Resolve the claim after the fee, or waive it earlier to close with no fee.
+
+## Inbound loads
+
+An inbound load is one trailer. Both stages stay on that same record.
+
+1. **Receiving.** When the trailer arrives, record the arrival time, carrier, trailer number, seal number, BOL/PRO, PO or ASN references, dock door, driver name, expected pallet and piece counts, and notes. Saving leaves the load **Waiting**. It is not unloaded yet.
+2. **Unloading.** Open that waiting load when the dock is ready. Record when unloading started and who did it. The load is then **Unloading**. When the work is finished, record the finish time, the quantities received against the expected counts, how it was sorted, the putaway locations, and any damage, shortage, or overage. Saving that marks the load **Done**.
+
+The inbound list shows the waiting queue and both stages. Open a load to see receiving and unloading together. Loads are stored in the same SQLite file as claims.
 
 Seeded claim types:
 
