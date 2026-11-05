@@ -1,0 +1,12 @@
+{
+  "name": "trailer-check-in",
+  "version": "1.0.0",
+  "description": "Warehouse app for recording information when a trailer arrives",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test --experimental-test-coverage \"test/**/*.test.js\""
+  }
+}

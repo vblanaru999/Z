@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trailer Check-In</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Trailer Check-In</h1>
+    <label class="who">Your name
+      <input id="who" type="text" maxlength="100" placeholder="e.g. Maria" autocomplete="name">
+    </label>
+  </header>
+
+  <main>
+    <section class="card" id="new-card">
+      <h2>Log arriving trailer</h2>
+      <form id="new-form" novalidate>
+        <div class="grid">
+          <label>Trailer # *<input name="trailer_number" required maxlength="30" autocapitalize="characters"></label>
+          <label>Carrier *<input name="carrier" required maxlength="100"></label>
+          <label>Driver name<input name="driver_name" maxlength="100"></label>
+          <label>Driver phone<input name="driver_phone" type="tel" maxlength="30"></label>
+          <label>Load type
+            <select name="load_type"><option value="live">Live</option><option value="drop">Drop</option></select>
+          </label>
+          <label>Door / dock<input name="door" maxlength="20"></label>
+          <label>BOL #<input name="bol_number" maxlength="50"></label>
+          <label>PO #s<input name="po_numbers" maxlength="500" placeholder="comma separated"></label>
+          <label>Seal #<input name="seal_number" maxlength="50"></label>
+          <label>Pallet count<input name="pallet_count" type="number" min="0" max="1000" step="1" inputmode="numeric"></label>
+          <label>Temp (°F)<input name="temperature_f" type="number" step="0.1" inputmode="decimal"></label>
+          <label>Condition
+            <select name="condition">
+              <option value="ok">OK</option><option value="damaged">Damaged</option>
+              <option value="seal_broken">Seal broken</option><option value="wet">Wet</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>Arrived at<input name="arrived_at" type="datetime-local"></label>
+          <label class="check"><input name="seal_intact" type="checkbox" checked> Seal intact</label>
+        </div>
+        <label class="block">First note (optional)<textarea name="note" rows="2" maxlength="2000"></textarea></label>
+        <p class="error" id="new-error" role="alert"></p>
+        <button type="submit" class="primary">Check in trailer</button>
+      </form>
+    </section>
+
+    <section class="card" id="list-card">
+      <div class="list-head">
+        <h2>Trailers</h2>
+        <input id="search" type="search" placeholder="Search trailer, carrier, BOL, PO, driver">
+        <select id="filter"><option value="">All statuses</option></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Trailer</th><th>Carrier</th><th>Door</th><th>Status</th><th>Arrived</th><th>Flags</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="muted" hidden>No trailers yet.</p>
+    </section>
+  </main>
+
+  <dialog id="detail">
+    <form method="dialog" class="close-row"><button aria-label="Close">✕</button></form>
+    <div id="detail-body"></div>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
