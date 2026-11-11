@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { ClaimsTable } from "../../components/ClaimsTable";
 import { PageHeader } from "../../components/PageHeader";
+import { claimFilterFromQuery, claimsExportHref } from "../../lib/claim-query";
 import { listClaimTypes } from "../../lib/catalog";
 import { listClaims } from "../../lib/claims";
 import { getStore } from "../../lib/db";
 import { listDrivers } from "../../lib/drivers";
-import { firstParam } from "../../lib/format";
-import { CLAIM_STATUSES, STATUS_LABELS, isClaimStatus, type ClaimFilter } from "../../lib/types";
+import { CLAIM_STATUSES, STATUS_LABELS } from "../../lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Claims" };
@@ -20,15 +20,7 @@ export default async function ClaimsPage({
   const db = await getStore();
   const drivers = await listDrivers(db);
   const types = await listClaimTypes(db);
-  const driverRaw = firstParam(query.driver);
-  const typeRaw = firstParam(query.type);
-  const statusRaw = firstParam(query.status);
-  const filter: ClaimFilter = {};
-  const driverId = Number(driverRaw);
-  const claimTypeId = Number(typeRaw);
-  if (driverRaw && Number.isInteger(driverId)) filter.driverId = driverId;
-  if (typeRaw && Number.isInteger(claimTypeId)) filter.claimTypeId = claimTypeId;
-  if (statusRaw && isClaimStatus(statusRaw)) filter.status = statusRaw;
+  const filter = claimFilterFromQuery(query);
   const claims = await listClaims(db, filter);
 
   return (
@@ -89,6 +81,9 @@ export default async function ClaimsPage({
           <h2>
             {claims.length} {claims.length === 1 ? "claim" : "claims"}
           </h2>
+          <a className="button" href={claimsExportHref(filter)}>
+            Export Excel
+          </a>
         </div>
         <ClaimsTable claims={claims} empty="No claims match these filters." />
       </section>

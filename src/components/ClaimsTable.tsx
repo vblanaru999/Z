@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatWhen } from "../lib/format";
+import { formatMoney } from "../lib/money";
 import type { ClaimListItem } from "../lib/types";
 import { SourceBadge, StatusBadge } from "./StatusBadge";
 
@@ -21,10 +22,12 @@ export function ClaimsTable({
       <table className="data">
         <thead>
           <tr>
+            <th>Claim ID</th>
             <th>When</th>
             {showDriver ? <th>Driver</th> : null}
             <th>What happened</th>
             <th>Order</th>
+            <th>Fee applied</th>
             <th>Status</th>
             <th>Source</th>
           </tr>
@@ -32,6 +35,7 @@ export function ClaimsTable({
         <tbody>
           {claims.map((claim) => (
             <tr key={claim.id}>
+              <td data-label="Claim ID" className="mono">{claim.id}</td>
               <td data-label="When">{formatWhen(claim.occurredAt)}</td>
               {showDriver ? <td data-label="Driver">{claim.driverName}</td> : null}
               <td data-label="What happened">
@@ -41,6 +45,9 @@ export function ClaimsTable({
               </td>
               <td data-label="Order" className="mono">
                 {claim.orderReference ?? "—"}
+              </td>
+              <td data-label="Fee applied" className="mono">
+                {claim.feeAmountCents === null ? "—" : formatMoney(claim.feeAmountCents)}
               </td>
               <td data-label="Status">
                 <StatusBadge status={claim.status} />
