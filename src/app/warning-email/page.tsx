@@ -26,6 +26,9 @@ export default async function WarningEmailPage({
       />
       <Banner error={firstParam(query.error)} notice={firstParam(query.notice)} />
       <section className="panel">
+        <div className="section-head">
+          <h2>Template</h2>
+        </div>
         <form action={saveWarningTemplateAction} className="stack">
           <label className="field">
             Subject

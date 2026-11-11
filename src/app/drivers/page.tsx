@@ -26,6 +26,9 @@ export default async function DriversPage() {
         <p className="empty">No drivers yet. Add one before recording a claim.</p>
       ) : (
         <section className="panel">
+          <div className="section-head">
+            <h2>Drivers</h2>
+          </div>
           <div className="table-wrap">
             <table className="data">
               <thead>

@@ -79,6 +79,7 @@ export default async function ClaimDetailPage({
               <h2>Record</h2>
               <StatusBadge status={claim.status} />
             </div>
+            <div className="panel-body">
             <dl className="facts">
               <div>
                 <dt>Driver</dt>
@@ -125,13 +126,21 @@ export default async function ClaimDetailPage({
                 </dd>
               </div>
             </dl>
+            </div>
           </section>
           <section className="panel">
-            <h2>What went wrong</h2>
-            <p className="notes">{claim.notes}</p>
+            <div className="section-head">
+              <h2>What went wrong</h2>
+            </div>
+            <div className="panel-body">
+              <p className="notes">{claim.notes}</p>
+            </div>
           </section>
           <section className="panel">
-            <h2>History</h2>
+            <div className="section-head">
+              <h2>History</h2>
+            </div>
+            <div className="panel-body">
             <ol className="timeline">
               {claim.events.map((event) => (
                 <li key={event.id}>
@@ -140,9 +149,13 @@ export default async function ClaimDetailPage({
                 </li>
               ))}
             </ol>
+            </div>
           </section>
           <section className="panel">
-            <h2>Emails</h2>
+            <div className="section-head">
+              <h2>Emails</h2>
+            </div>
+            <div className="panel-body">
             {claim.emails.length === 0 ? (
               <p className="empty">No emails yet. A warning is sent only when you choose to send it.</p>
             ) : (
@@ -163,10 +176,14 @@ export default async function ClaimDetailPage({
                 ))}
               </div>
             )}
+            </div>
           </section>
         </div>
         <aside className="action-card panel">
-          <h2>{closed ? "Closed" : "Next step"}</h2>
+          <div className="section-head">
+            <h2>{closed ? "Closed" : "Next step"}</h2>
+          </div>
+          <div className="panel-body stack">
           {closed ? (
             <p className="hint">
               This claim is {STATUS_LABELS[claim.status].toLowerCase()}. The record stays as it is.
@@ -234,6 +251,7 @@ export default async function ClaimDetailPage({
               </form>
             </>
           ) : null}
+          </div>
         </aside>
       </div>
     </>

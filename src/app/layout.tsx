@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Figtree, Fraunces } from "next/font/google";
+import { Figtree } from "next/font/google";
 import { connection } from "next/server";
 import { SideNav } from "../components/SideNav";
 import "./globals.css";
@@ -8,14 +8,6 @@ const sans = Figtree({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
-});
-
-const display = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-  weight: ["500", "600", "700"],
-  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -28,7 +20,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   await connection();
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${display.variable}`}>
+      <body className={sans.variable}>
         <a className="skip" href="#content">
           Skip to content
         </a>
