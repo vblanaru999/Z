@@ -42,6 +42,9 @@ export default async function EditDriverPage({
       />
       <Banner error={firstParam(query.error)} notice={firstParam(query.notice)} />
       <section className="panel">
+        <div className="section-head">
+          <h2>Contract</h2>
+        </div>
         <DriverForm
           driver={driver}
           claimTypes={await listClaimTypes(db)}

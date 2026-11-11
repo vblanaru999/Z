@@ -32,6 +32,9 @@ export default async function NewClaimPage() {
         </div>
       ) : (
         <section className="panel">
+          <div className="section-head">
+            <h2>Details</h2>
+          </div>
           <ClaimForm
             drivers={drivers}
             claimTypes={claimTypes}

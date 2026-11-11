@@ -16,6 +16,9 @@ export default async function NewDriverPage() {
         lede="The default fee is the contract amount. You can set a different amount for a claim type."
       />
       <section className="panel">
+        <div className="section-head">
+          <h2>Driver</h2>
+        </div>
         <DriverForm claimTypes={claimTypes} typeFees={[]} />
       </section>
     </>
