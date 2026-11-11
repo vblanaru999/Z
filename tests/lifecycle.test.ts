@@ -7,6 +7,7 @@ import {
   getClaimDetail,
   listClaims,
   resolveClaim,
+  saveWarningTemplate,
   sendWarning,
   waiveClaim,
   warningEmailForClaim,
@@ -177,7 +178,7 @@ describe("lifecycle", () => {
     expect(body).toContain("formal warning");
     expect(body).toContain("Repeated issues can incur the fee");
     expect(body).toContain(formatMoney(4000));
-    expect(body).toBe(warningEmailForClaim(detail!).text);
+    expect(body).toBe((await warningEmailForClaim(db, detail!)).text);
     expect(detail?.events.map((event) => event.kind)).toEqual([
       "created",
       "email",
@@ -228,7 +229,7 @@ describe("lifecycle", () => {
     const driverId = await addDriver();
     const recordedId = await addClaim(driverId, await typeId("order_not_closed"), null);
     expect((await getClaimDetail(db, recordedId))?.emails).toHaveLength(0);
-    const preview = warningEmailForClaim((await getClaimDetail(db, recordedId))!);
+    const preview = await warningEmailForClaim(db, (await getClaimDetail(db, recordedId))!);
     expect(preview.text).not.toContain("Order reference");
     expect(preview.text).toContain("What went wrong:");
 
@@ -445,5 +446,35 @@ describe("warning copy", () => {
     expect(email.text).toContain("$20.00");
     expect(email.text).toContain("claim 12");
     expect(email.text).toMatch(/When: .+\d:\d{2}/);
+  });
+
+  it("sends the saved template, with this claim filled in", async () => {
+    await saveWarningTemplate(db, {
+      subject: "Notice for {{driver}}",
+      body: [
+        "{{driver}} missed {{claimType}}.",
+        "When: {{when}}",
+        "Order: {{orderReference}}",
+        "This is a warning. Repeated issues can incur the contract fee {{fee}}.",
+      ].join("\n"),
+    });
+    const driverId = await addDriver({ defaultFeeCents: 1500 });
+    const claimId = await addClaim(driverId, await typeId("label_not_scanned"), "55");
+    await sendWarning(db, claimId, outbox);
+    const detail = await getClaimDetail(db, claimId);
+    expect(detail?.emails[0]?.subject).toBe("Notice for Maria Alvarez");
+    const body = detail?.emails[0]?.body ?? "";
+    expect(body).toContain("Maria Alvarez missed Delivery label not scanned.");
+    expect(body).toContain("Order: 55");
+    expect(body).toContain("warning");
+    expect(body).toContain("Repeated issues can incur the contract fee $15.00");
+    expect(body).toMatch(/When: .+\d:\d{2}/);
+    expect(body).toBe((await warningEmailForClaim(db, detail!)).text);
+  });
+
+  it("rejects an empty warning template", async () => {
+    await expect(saveWarningTemplate(db, { subject: "  ", body: "Hello" })).rejects.toThrow(
+      /subject/,
+    );
   });
 });

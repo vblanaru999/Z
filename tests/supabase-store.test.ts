@@ -164,6 +164,23 @@ describe("supabase store queries", () => {
     });
   });
 
+  it("reads the default warning template when the row is missing and inserts a saved one", async () => {
+    const client = fakeClient((call) => {
+      if (call.op === "select") return { data: null, error: null };
+      return { data: null, error: null };
+    });
+    const store = createSupabaseStore(client as never);
+    const template = await store.getWarningTemplate();
+    expect(template.subject).toBe("Warning: {{claimType}}");
+    expect(template.body).toContain("{{driver}}");
+    await store.saveWarningTemplate({ subject: "Notice", body: "Hello {{driver}}" });
+    expect(client.calls.at(-1)).toMatchObject({
+      table: "warning_template",
+      op: "insert",
+      payload: expect.objectContaining({ id: 1, subject: "Notice", body: "Hello {{driver}}" }),
+    });
+  });
+
   it("updates a claim only when the expected status still matches", async () => {
     const client = fakeClient(() => ({ data: [{ id: 3 }], error: null }));
     const store = createSupabaseStore(client as never);

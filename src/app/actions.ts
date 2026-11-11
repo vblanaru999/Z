@@ -7,6 +7,7 @@ import {
   applyFee,
   createClaim,
   resolveClaim,
+  saveWarningTemplate,
   sendWarning,
   waiveClaim,
 } from "../lib/claims";
@@ -115,6 +116,21 @@ export async function resolveClaimAction(formData: FormData): Promise<void> {
   }
   refreshClaim(id);
   redirect(`/claims/${id}?notice=${encodeURIComponent("Claim resolved.")}`);
+}
+
+export async function saveWarningTemplateAction(formData: FormData): Promise<void> {
+  const db = await getStore();
+  try {
+    await saveWarningTemplate(db, {
+      subject: String(formData.get("subject") ?? ""),
+      body: String(formData.get("body") ?? ""),
+    });
+  } catch (error) {
+    bail("/warning-email", error);
+  }
+  revalidatePath("/warning-email");
+  revalidatePath("/claims");
+  redirect("/warning-email?notice=" + encodeURIComponent("Warning email saved. The next warning uses this text."));
 }
 
 export async function waiveClaimAction(formData: FormData): Promise<void> {

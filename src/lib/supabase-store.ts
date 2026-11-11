@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CLAIM_TYPE_SEEDS } from "./catalog";
+import { DEFAULT_WARNING_BODY, DEFAULT_WARNING_SUBJECT } from "./email-copy";
 import type {
   ClaimEventView,
   ClaimFilter,
@@ -572,6 +573,36 @@ export function createSupabaseStore(client: SupabaseClient): Store {
           created_at: row.createdAt,
         }),
       );
+    },
+
+    async getWarningTemplate() {
+      const row = unwrap(
+        await client
+          .from("warning_template")
+          .select("subject, body")
+          .eq("id", 1)
+          .maybeSingle(),
+      ) as { subject: string; body: string } | null;
+      if (!row) {
+        return { subject: DEFAULT_WARNING_SUBJECT, body: DEFAULT_WARNING_BODY };
+      }
+      return { subject: row.subject, body: row.body };
+    },
+
+    async saveWarningTemplate(template) {
+      const existing = unwrap(
+        await client.from("warning_template").select("id").eq("id", 1).maybeSingle(),
+      ) as { id: number | string } | null;
+      const payload = {
+        subject: template.subject,
+        body: template.body,
+        updated_at: new Date().toISOString(),
+      };
+      if (existing) {
+        unwrap(await client.from("warning_template").update(payload).eq("id", 1));
+        return;
+      }
+      unwrap(await client.from("warning_template").insert({ id: 1, ...payload }));
     },
 
     async listEvents(claimId) {

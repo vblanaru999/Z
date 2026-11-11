@@ -1,5 +1,5 @@
 import { getClaimType } from "./catalog";
-import { buildWarningEmail, type WarningEmail } from "./email-copy";
+import { renderWarningEmail, type WarningEmail, type WarningTemplate } from "./email-copy";
 import { emailAuditMessage, type Mailer } from "./mailer";
 import { AppError } from "./errors";
 import { nowIso } from "./format";
@@ -117,8 +117,8 @@ export async function getClaimDetail(store: Store, id: number): Promise<ClaimDet
   };
 }
 
-export function warningEmailForClaim(detail: ClaimDetail): WarningEmail {
-  return buildWarningEmail({
+function warningInput(detail: ClaimDetail) {
+  return {
     claimId: detail.id,
     driverName: detail.driverName,
     driverEmail: detail.driverEmail,
@@ -129,7 +129,28 @@ export function warningEmailForClaim(detail: ClaimDetail): WarningEmail {
     feeAmountCents: detail.contractFeeCents,
     feeBasis: detail.contractFeeBasis,
     defaultFeeCents: detail.defaultFeeCents,
-  });
+  };
+}
+
+export async function warningEmailForClaim(
+  store: Store,
+  detail: ClaimDetail,
+): Promise<WarningEmail> {
+  const template = await store.getWarningTemplate();
+  return renderWarningEmail(template, warningInput(detail));
+}
+
+export async function saveWarningTemplate(
+  store: Store,
+  template: WarningTemplate,
+): Promise<void> {
+  const subject = template.subject.trim();
+  const body = template.body.trim();
+  if (!subject) throw new AppError("Write a subject for the warning email.");
+  if (!body) throw new AppError("Write the warning email.");
+  if (subject.length > 200) throw new AppError("The subject is too long.");
+  if (body.length > 20000) throw new AppError("The warning email is too long.");
+  await store.saveWarningTemplate({ subject, body });
 }
 
 export function listRecentEmails(store: Store, limit = 8): Promise<RecentEmail[]> {
@@ -147,7 +168,7 @@ export async function sendWarning(store: Store, claimId: number, mailer: Mailer)
   if (detail.status !== "recorded") {
     throw new AppError("A warning can only be sent while the claim is recorded.");
   }
-  const email = warningEmailForClaim(detail);
+  const email = await warningEmailForClaim(store, detail);
   const result = await mailer.send({
     to: email.to,
     subject: email.subject,

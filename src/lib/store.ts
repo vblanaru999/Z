@@ -1,3 +1,4 @@
+import type { WarningTemplate } from "./email-copy";
 import type {
   ClaimEventView,
   ClaimFilter,
@@ -95,7 +96,7 @@ export type EventInsert = {
   createdAt: string;
 };
 
-/** Persistence for drivers, claim types, claims, emails, and history. */
+/** Persistence for drivers, claim types, claims, emails, history, and the warning template. */
 export type Store = {
   seedClaimTypes(): Promise<void>;
   listClaimTypes(): Promise<ClaimType[]>;
@@ -125,4 +126,7 @@ export type Store = {
 
   insertEvent(row: EventInsert): Promise<void>;
   listEvents(claimId: number): Promise<ClaimEventView[]>;
+
+  getWarningTemplate(): Promise<WarningTemplate>;
+  saveWarningTemplate(template: WarningTemplate): Promise<void>;
 };

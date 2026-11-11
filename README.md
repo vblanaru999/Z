@@ -25,7 +25,9 @@ Data lives in Supabase, not in a local database file. Copy `.env.example` to `.e
 
 Do not put the publishable key in `SUPABASE_SERVICE_ROLE_KEY`. The browser never receives the secret key.
 
-Before the first run, open the Supabase SQL editor and run `supabase/schema.sql`. That creates the tables, indexes, and the three claim types, and turns on row level security so the publishable key cannot read them. The app cannot load drivers or claims until those variables are set and that SQL has been run.
+Before the first run, open the Supabase SQL editor and run `supabase/schema.sql`. That creates the tables, indexes, the three claim types, and the default warning email, and turns on row level security so the publishable key cannot read them. The app cannot load drivers or claims until those variables are set and that SQL has been run.
+
+If the tables already exist, run `supabase/warning-template.sql` instead. That adds only the warning template and leaves a template you already saved in place.
 
 Optional sample drivers and one recorded claim (needs the variables above):
 
@@ -47,6 +49,7 @@ npm start
 3. Open the claim and send the warning. With `SMTP2GO_API_KEY` set, the message goes through SMTP2GO and the claim becomes **Warning sent** only after SMTP2GO accepts it. Without that key, SMTP is used when it is fully configured. Otherwise the message is saved in the claim's outbox and the status becomes **Warning sent**.
 4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
 5. Resolve the claim after the fee, or waive it earlier to close with no fee.
+6. Edit the warning email under Warning email. The next warning uses the saved text. Tokens such as `{{driver}}`, `{{claimType}}`, `{{when}}`, and `{{orderReference}}` are filled in for that claim. `{{when}}` stays a date and time.
 
 Seeded claim types:
 
