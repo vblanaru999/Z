@@ -217,6 +217,32 @@ a.stat:hover { background: var(--gold-soft); }
 
 .table-wrap { overflow-x: auto; }
 table.data { width: 100%; border-collapse: collapse; }
+table.data.claims {
+  table-layout: fixed;
+  font-size: 0.8rem;
+}
+table.data.claims .col-id { width: 4.2rem; }
+table.data.claims .col-when { width: 8.5rem; }
+table.data.claims .col-driver { width: 8.8rem; }
+table.data.claims .col-order { width: 6.4rem; }
+table.data.claims .col-fee { width: 5.6rem; }
+table.data.claims .col-status { width: 6.8rem; }
+table.data.claims .col-source { width: 4.4rem; }
+table.data.claims th,
+table.data.claims td {
+  padding: 8px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.data.claims th { font-size: 0.62rem; letter-spacing: 0.03em; }
+table.data.claims .row-link {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+table.data.claims .badge { font-size: 0.68rem; padding: 2px 7px; }
 table.data th {
   text-align: left;
   font-size: 0.68rem;
@@ -459,13 +485,13 @@ button:disabled { opacity: 0.65; cursor: progress; }
 }
 
 @media (max-width: 800px) {
-  table.data thead { display: none; }
-  table.data,
-  table.data tbody,
-  table.data tr,
-  table.data td { display: block; width: auto; }
-  table.data tr { padding: 12px; border-top: 1px solid var(--line); }
-  table.data td {
+  table.data:not(.claims) thead { display: none; }
+  table.data:not(.claims),
+  table.data:not(.claims) tbody,
+  table.data:not(.claims) tr,
+  table.data:not(.claims) td { display: block; width: auto; }
+  table.data:not(.claims) tr { padding: 12px; border-top: 1px solid var(--line); }
+  table.data:not(.claims) td {
     border: 0;
     padding: 3px 0;
     display: grid;
@@ -475,7 +501,7 @@ button:disabled { opacity: 0.65; cursor: progress; }
     overflow-wrap: anywhere;
     min-width: 0;
   }
-  table.data td::before {
+  table.data:not(.claims) td::before {
     content: attr(data-label);
     color: var(--muted);
     font-size: 0.68rem;
