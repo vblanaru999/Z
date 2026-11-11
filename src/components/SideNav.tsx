@@ -7,6 +7,7 @@ const links = [
   { href: "/", label: "Dashboard", exact: true },
   { href: "/claims", label: "Claims", exact: false },
   { href: "/drivers", label: "Drivers", exact: false },
+  { href: "/warning-email", label: "Warning email", exact: true },
 ];
 
 export function SideNav() {

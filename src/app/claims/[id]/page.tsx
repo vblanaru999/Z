@@ -50,12 +50,13 @@ export default async function ClaimDetailPage({
   const query = await searchParams;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const claim = await getClaimDetail(await getStore(), id);
+  const db = await getStore();
+  const claim = await getClaimDetail(db, id);
   if (!claim) notFound();
 
   const actions = allowedActions(claim.status);
   const mailMode = describeMailMode(process.env);
-  const preview = actions.sendWarning ? warningEmailForClaim(claim) : null;
+  const preview = actions.sendWarning ? await warningEmailForClaim(db, claim) : null;
   const closed = claim.status === "resolved" || claim.status === "waived";
 
   return (

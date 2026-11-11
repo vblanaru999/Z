@@ -297,6 +297,9 @@ legend { font-family: var(--font-display), Georgia, serif; font-size: 1.25rem; p
 }
 button:disabled { opacity: 0.65; cursor: progress; }
 .form-actions { display: flex; gap: 10px; }
+.placeholder-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.placeholder-list li { display: flex; gap: 10px; align-items: baseline; font-weight: 400; }
+.placeholder-list code { font-size: 0.85rem; }
 
 .banner {
   margin: 0 0 16px;

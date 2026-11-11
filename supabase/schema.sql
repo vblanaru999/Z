@@ -70,6 +70,14 @@ create table if not exists public.claim_events (
   created_at timestamptz not null default now()
 );
 
+-- One warning email. The app replaces {{driver}}, {{claimType}}, {{when}}, and the other tokens per claim.
+create table if not exists public.warning_template (
+  id integer primary key check (id = 1),
+  subject text not null,
+  body text not null,
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_claims_status on public.claims (status);
 create index if not exists idx_claims_driver on public.claims (driver_id);
 create index if not exists idx_claims_type on public.claims (claim_type_id);
@@ -97,12 +105,32 @@ on conflict (code) do update set
   label = excluded.label,
   description = excluded.description;
 
+insert into public.warning_template (id, subject, body)
+values (
+  1,
+  'Warning: {{claimType}}',
+  $warning$Hello {{driver}},
+
+This is a formal warning. A delivery procedure was not followed.
+
+What was not done: {{claimType}}
+When: {{when}}
+{{orderLine}}What went wrong: {{notes}}
+
+This message is a warning. It does not apply a fee. Repeated issues can incur the fee in your contract.
+{{feeSentence}}
+
+Reference: claim {{claimId}}$warning$
+)
+on conflict (id) do nothing;
+
 alter table public.claim_types enable row level security;
 alter table public.drivers enable row level security;
 alter table public.driver_fee_terms enable row level security;
 alter table public.claims enable row level security;
 alter table public.emails enable row level security;
 alter table public.claim_events enable row level security;
+alter table public.warning_template enable row level security;
 
 revoke all on table public.claim_types from anon, authenticated;
 revoke all on table public.drivers from anon, authenticated;
@@ -110,6 +138,7 @@ revoke all on table public.driver_fee_terms from anon, authenticated;
 revoke all on table public.claims from anon, authenticated;
 revoke all on table public.emails from anon, authenticated;
 revoke all on table public.claim_events from anon, authenticated;
+revoke all on table public.warning_template from anon, authenticated;
 
 grant select, insert, update, delete on table public.claim_types to service_role;
 grant select, insert, update, delete on table public.drivers to service_role;
@@ -117,3 +146,4 @@ grant select, insert, update, delete on table public.driver_fee_terms to service
 grant select, insert, update, delete on table public.claims to service_role;
 grant select, insert, update, delete on table public.emails to service_role;
 grant select, insert, update, delete on table public.claim_events to service_role;
+grant select, insert, update, delete on table public.warning_template to service_role;

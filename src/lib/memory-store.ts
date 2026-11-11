@@ -1,4 +1,5 @@
 import { CLAIM_TYPE_SEEDS } from "./catalog";
+import { DEFAULT_WARNING_BODY, DEFAULT_WARNING_SUBJECT } from "./email-copy";
 import type {
   ClaimEventView,
   ClaimFilter,
@@ -67,6 +68,10 @@ export function createMemoryStore(): MemoryStore {
   const claims: ClaimRow[] = [];
   const emails: EmailRow[] = [];
   const events: EventRow[] = [];
+  let warningTemplate = {
+    subject: DEFAULT_WARNING_SUBJECT,
+    body: DEFAULT_WARNING_BODY,
+  };
   let nextType = 1;
   let nextDriver = 1;
   let nextClaim = 1;
@@ -366,6 +371,14 @@ export function createMemoryStore(): MemoryStore {
         .filter((event) => event.claimId === claimId)
         .sort((a, b) => a.id - b.id)
         .map(({ claimId: _claimId, ...event }) => event);
+    },
+
+    async getWarningTemplate() {
+      return { ...warningTemplate };
+    },
+
+    async saveWarningTemplate(template) {
+      warningTemplate = { subject: template.subject, body: template.body };
     },
   };
 
