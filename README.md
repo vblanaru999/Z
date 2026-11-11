@@ -50,6 +50,7 @@ npm start
 4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
 5. Resolve the claim after the fee, or waive it earlier to close with no fee.
 6. Edit the warning email under Warning email. The next warning uses the saved text. Tokens such as `{{driver}}`, `{{claimType}}`, `{{when}}`, and `{{orderReference}}` are filled in for that claim. `{{when}}` stays a date and time.
+7. On Claims, filter the list and use Export Excel. The download is the list on screen, with Claim ID, When, Driver, What happened, Order, Fee applied, Status, and Source.
 
 Seeded claim types:
 
