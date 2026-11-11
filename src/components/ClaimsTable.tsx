@@ -22,6 +22,7 @@ export function ClaimsTable({
       <table className="data">
         <thead>
           <tr>
+            <th>Claim ID</th>
             <th>When</th>
             {showDriver ? <th>Driver</th> : null}
             <th>What happened</th>
@@ -34,6 +35,7 @@ export function ClaimsTable({
         <tbody>
           {claims.map((claim) => (
             <tr key={claim.id}>
+              <td data-label="Claim ID" className="mono">{claim.id}</td>
               <td data-label="When">{formatWhen(claim.occurredAt)}</td>
               {showDriver ? <td data-label="Driver">{claim.driverName}</td> : null}
               <td data-label="What happened">
