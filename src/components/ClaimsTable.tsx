@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatWhen } from "../lib/format";
+import { formatMoney } from "../lib/money";
 import type { ClaimListItem } from "../lib/types";
 import { SourceBadge, StatusBadge } from "./StatusBadge";
 
@@ -25,6 +26,7 @@ export function ClaimsTable({
             {showDriver ? <th>Driver</th> : null}
             <th>What happened</th>
             <th>Order</th>
+            <th>Fee applied</th>
             <th>Status</th>
             <th>Source</th>
           </tr>
@@ -41,6 +43,9 @@ export function ClaimsTable({
               </td>
               <td data-label="Order" className="mono">
                 {claim.orderReference ?? "—"}
+              </td>
+              <td data-label="Fee applied" className="mono">
+                {claim.feeAmountCents === null ? "—" : formatMoney(claim.feeAmountCents)}
               </td>
               <td data-label="Status">
                 <StatusBadge status={claim.status} />
