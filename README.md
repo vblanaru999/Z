@@ -49,7 +49,7 @@ npm start
 3. Open the claim and send the warning. With `SMTP2GO_API_KEY` set, the message goes through SMTP2GO and the claim becomes **Warning sent** only after SMTP2GO accepts it. Without that key, SMTP is used when it is fully configured. Otherwise the message is saved in the claim's outbox and the status becomes **Warning sent**.
 4. Apply the contract fee. The amount is the claim-type fee when one is stored, otherwise the driver's default. The amount is copied onto the claim.
 5. Resolve the claim after the fee, or waive it earlier to close with no fee.
-6. Edit the warning email under Warning email. The next warning uses the saved text. Tokens such as `{{driver}}`, `{{claimType}}`, `{{when}}`, and `{{orderReference}}` are filled in for that claim. `{{when}}` stays a date and time.
+6. Edit the warning email under Warning email. The next warning uses the saved text. Tokens such as `{{driver}}`, `{{claimType}}`, `{{when}}`, and `{{orderReference}}` are filled in for that claim. `{{when}}` stays a date and time, shown as mm/dd/yy with the time (11/10/26 9:23 PM).
 7. On Claims, filter the list and use Export Excel. The download is the list on screen, with Claim ID, When, Driver, What happened, Order, Fee applied, Status, and Source.
 
 Seeded claim types:

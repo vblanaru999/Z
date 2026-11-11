@@ -19,7 +19,17 @@ export function ClaimsTable({
 
   return (
     <div className="table-wrap">
-      <table className="data">
+      <table className="data claims">
+        <colgroup>
+          <col className="col-id" />
+          <col className="col-when" />
+          {showDriver ? <col className="col-driver" /> : null}
+          <col className="col-what" />
+          <col className="col-order" />
+          <col className="col-fee" />
+          <col className="col-status" />
+          <col className="col-source" />
+        </colgroup>
         <thead>
           <tr>
             <th>Claim ID</th>
@@ -36,14 +46,16 @@ export function ClaimsTable({
           {claims.map((claim) => (
             <tr key={claim.id}>
               <td data-label="Claim ID" className="mono">{claim.id}</td>
-              <td data-label="When">{formatWhen(claim.occurredAt)}</td>
-              {showDriver ? <td data-label="Driver">{claim.driverName}</td> : null}
+              <td data-label="When" title={formatWhen(claim.occurredAt)}>{formatWhen(claim.occurredAt)}</td>
+              {showDriver ? (
+                <td data-label="Driver" title={claim.driverName}>{claim.driverName}</td>
+              ) : null}
               <td data-label="What happened">
-                <Link href={`/claims/${claim.id}`} className="row-link">
+                <Link href={`/claims/${claim.id}`} className="row-link" title={claim.claimTypeLabel}>
                   {claim.claimTypeLabel}
                 </Link>
               </td>
-              <td data-label="Order" className="mono">
+              <td data-label="Order" className="mono" title={claim.orderReference ?? undefined}>
                 {claim.orderReference ?? "—"}
               </td>
               <td data-label="Fee applied" className="mono">
